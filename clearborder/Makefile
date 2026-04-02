@@ -24,3 +24,7 @@ up:
 # Données de démo (à lancer après le 1er docker compose up)
 seed:
 	docker compose run --rm api python scripts/seed_data.py
+
+# Vérifier l'API déployée (usage: make verify URL=https://xxx.run.app)
+verify:
+	@./scripts/verify_deploy.sh $(URL)

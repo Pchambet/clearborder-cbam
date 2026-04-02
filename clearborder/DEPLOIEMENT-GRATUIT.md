@@ -94,12 +94,8 @@ Comme l’API et le seed utilisent la même `DATABASE_URL` Neon, le seed en loca
 
 1. Push sur `main` → le workflow GitHub Actions déploie
 2. Dans l’onglet **Actions**, récupérer l’URL du service
-3. Tester :
-
-```bash
-curl https://clearborder-api-xxxxx.run.app/health
-curl https://clearborder-api-xxxxx.run.app/docs
-```
+3. Lancer `./scripts/verify_deploy.sh https://TON-URL` ou tester :
+   `curl https://ton-url/health`
 
 ---
 

@@ -10,7 +10,7 @@ API_BASE = os.getenv("API_BASE", "http://localhost:8000/api/v1")
 HEALTH_URL = os.getenv("API_BASE", "http://localhost:8000").replace("/api/v1", "") + "/health"
 
 st.set_page_config(
-    page_title="ClearBorder — CBAM Compliance",
+    page_title="ClearBorder — CBAM embedded emissions",
     layout="wide",
 )
 

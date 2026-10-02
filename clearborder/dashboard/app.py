@@ -23,22 +23,30 @@ HEADERS = {"X-API-Key": key} if (key := os.getenv("API_KEY")) else {}
 
 
 def api_get(path: str):
-    """JSON body on success, None when the API is unreachable or answers with an error."""
+    """JSON body on success; otherwise shows the error and returns None.
+
+    An error is shown, not masked as an empty list: a 401 (missing API_KEY) or a 500
+    must not read as "no data yet".
+    """
     try:
         r = requests.get(f"{API_BASE}{path}", headers=HEADERS, timeout=5)
-        return r.json() if r.ok else None
-    except requests.exceptions.ConnectionError:
+    except requests.exceptions.RequestException as e:
+        st.error(f"API unavailable: {e}")
         return None
+    if not r.ok:
+        st.error(f"API error {r.status_code}: {r.text}")
+        return None
+    return r.json()
 
 
 def api_post(path: str, json: dict):
-    """The response (even 4xx/5xx), or None when the API is unreachable.
+    """The response (even 4xx/5xx), or None when the request failed (unreachable, timeout).
 
     Callers must test ``r is None``: a requests.Response is falsy on 4xx/5xx.
     """
     try:
         return requests.post(f"{API_BASE}{path}", json=json, headers=HEADERS, timeout=10)
-    except requests.exceptions.ConnectionError:
+    except requests.exceptions.RequestException:
         return None
 
 
@@ -97,7 +105,7 @@ elif page == "CN classification":
     cn_codes = api_get("/cn-codes")
     if cn_codes:
         with st.expander("Loaded CN codes"):
-            st.dataframe(cn_codes, use_container_width=True)
+            st.dataframe(cn_codes)
 
 elif page == "Installations":
     st.header("Installations (non-EU producers)")
@@ -126,8 +134,8 @@ elif page == "Installations":
 
     data = api_get("/installations")
     if data:
-        st.dataframe(data, use_container_width=True)
-    else:
+        st.dataframe(data)
+    elif data is not None:  # None: the error is already shown
         st.info("No installation yet. Create one above.")
 
 elif page == "Products":
@@ -151,45 +159,49 @@ elif page == "Products":
         p1_see = st.number_input("Precursor SEE (kg CO2e/kg)", min_value=0.0, value=0.0)
         p1_real = st.checkbox("Precursor SEE is actual installation data", False)
 
-        if st.form_submit_button("Create"):
-            precursors = []
-            if p1_mass > 0:
-                precursors.append(
-                    {"mass_kg": float(p1_mass), "see_per_kg": float(p1_see), "is_real_data": p1_real}
-                )
-            r = api_post(
-                "/products",
-                {
-                    "name": name,
-                    "cn_code": cn_code.replace(" ", ""),
-                    "sector": sector,
-                    "installation_id": int(inst_id),
-                    "activity_level": float(activity),
-                    "attributed_emissions": float(attr_em),
-                    "precursors": precursors,
-                },
+        submitted = st.form_submit_button("Create")
+
+    if submitted and inst_id is None:
+        st.error("Create an installation first.")
+    elif submitted:
+        precursors = []
+        if p1_mass > 0:
+            precursors.append(
+                {"mass_kg": float(p1_mass), "see_per_kg": float(p1_see), "is_real_data": p1_real}
             )
-            if r is not None and r.status_code == 200:
-                st.success("Product created")
-            elif r is not None:
-                st.error(r.text)
-            else:
-                st.error("API unavailable")
+        r = api_post(
+            "/products",
+            {
+                "name": name,
+                "cn_code": cn_code.replace(" ", ""),
+                "sector": sector,
+                "installation_id": int(inst_id),
+                "activity_level": float(activity),
+                "attributed_emissions": float(attr_em),
+                "precursors": precursors,
+            },
+        )
+        if r is not None and r.status_code == 200:
+            st.success("Product created")
+        elif r is not None:
+            st.error(r.text)
+        else:
+            st.error("API unavailable")
 
     data = api_get("/products")
     if data:
-        st.dataframe(data, use_container_width=True)
-    else:
+        st.dataframe(data)
+    elif data is not None:  # None: the error is already shown
         st.info("No product yet. Create one above.")
 
 elif page == "CBAM report":
     st.header("Quarterly CBAM report")
 
-    products = api_get("/products") or []
+    products = api_get("/products")
 
-    if not products:
+    if products == []:
         st.info("Add products before generating a report.")
-    else:
+    elif products:
         with st.form("cbam_report"):
             declarant_id = st.text_input("Declarant ID", "EU-CBAM-2026-001")
             period = st.text_input("Period", "2026-Q1")
@@ -216,7 +228,7 @@ elif page == "CBAM report":
             if r is not None and r.status_code == 200:
                 data = r.json()
                 st.success("Report generated")
-                st.dataframe(data.get("results", []), use_container_width=True)
+                st.dataframe(data.get("results", []))
                 st.download_button(
                     "Download XML",
                     data.get("xml_content", ""),

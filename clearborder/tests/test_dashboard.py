@@ -70,3 +70,38 @@ def test_api_errors_are_shown_not_masked(dashboard):
     errors = [e.value for e in at.error]
     assert errors and "API unavailable" not in errors[0]
     assert "country_code" in errors[0]
+
+
+def test_list_errors_are_shown_not_read_as_empty(dashboard, monkeypatch):
+    """With API keys required and none configured, the list page reports the 401."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "api_keys", "secret")
+    at = dashboard("Installations")
+    assert any("401" in e.value for e in at.error)
+    assert not at.info  # no "No installation yet" on top of the error
+
+
+def test_timeout_is_reported_not_raised(dashboard, monkeypatch):
+    def timeout(*args, **kwargs):
+        raise requests.exceptions.ReadTimeout("read timed out")
+
+    monkeypatch.setattr(requests, "get", timeout)
+    at = dashboard("Products")
+    assert any("API unavailable" in e.value for e in at.error)
+
+
+def test_product_form_without_installation(dashboard, monkeypatch):
+    """Submitting a product before any installation exists asks for one instead of crashing."""
+
+    class Empty:
+        ok, status_code, text = True, 200, "[]"
+
+        def json(self):
+            return []
+
+    monkeypatch.setattr(requests, "get", lambda *args, **kwargs: Empty())
+    at = dashboard("Products")
+    at.button[0].click().run()
+    assert not at.exception, at.exception
+    assert "Create an installation first." in [e.value for e in at.error]

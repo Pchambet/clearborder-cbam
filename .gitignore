@@ -1,4 +1,4 @@
-# Secrets (ne jamais commiter)
+# Secrets
 sa-key.json
 *.pem
 .env
@@ -10,14 +10,18 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+.ruff_cache/
 
 # Tests / build
 .coverage
 htmlcov/
 .pytest_cache/
 
-# Base SQLite locale
+# Local SQLite databases
 *.db
 
 # Trained models are local artefacts
 clearborder/models/
+
+.DS_Store
+.ipynb_checkpoints/

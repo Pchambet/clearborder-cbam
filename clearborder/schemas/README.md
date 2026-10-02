@@ -1,9 +1,9 @@
-# Schémas XSD CBAM
+# XSD schemas
 
-Placez ici le schéma XSD officiel TAXUD pour la validation stricte des rapports CBAM.
+Place an XSD here as `cbam_report.xsd` to have `app.xml_generator.validate_xml_against_xsd`
+check generated reports against it. Without it, only the structural check
+(`validate_xml_structure`) runs.
 
-**Fichier attendu** : `cbam_report.xsd`
-
-Le schéma officiel est disponible via le [CBAM Declarant Portal](https://taxation-customs.ec.europa.eu/carbon-border-adjustment-mechanism/cbam-registry-and-reporting_en) de la Commission européenne.
-
-Sans ce fichier, ClearBorder utilise une validation de structure (éléments requis) qui couvre le format Quarterly Report.
+The XML produced by this prototype uses its own namespace and is not the official CBAM
+Registry format, so the official schema would reject it. Mapping to that schema is listed
+under limitations in the main README.

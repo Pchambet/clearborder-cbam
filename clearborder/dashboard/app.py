@@ -71,7 +71,8 @@ if page == "Home":
     st.header("How it works")
     st.markdown("""
     ClearBorder computes the specific embedded emissions (SEE) of goods covered by the
-    EU Carbon Border Adjustment Mechanism and checks the 20 % cap on estimated data.
+    EU Carbon Border Adjustment Mechanism and checks the 20 % cap on estimated data that
+    applied during the 2023–2025 transitional period.
 
     1. **Installations**: register the non-EU producer.
     2. **Products**: declare a good, its direct emissions and its precursors.
@@ -246,6 +247,7 @@ else:
     **ClearBorder** v0.1.0 — prototype, spring 2026.
 
     - SEE per Annex IV of Regulation (EU) 2023/956, including nested bills of materials
-    - 20 % cap on estimated data for complex goods, measured on embedded emissions
+    - 20 % cap on estimated data for complex goods (2023–2025 transitional period),
+      measured on embedded emissions
     - Simplified quarterly-report XML (not the official CBAM Registry schema)
     """)

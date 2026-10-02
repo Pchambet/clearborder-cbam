@@ -4,7 +4,7 @@ How much embedded CO2 does an imported steel or aluminium good carry under the E
 Adjustment Mechanism (CBAM), and does its data meet the 20 % cap on estimates? A tested calculation
 engine, API and dashboard, built as an early prototype in spring 2026.
 
-[![CI](https://github.com/Pchambet/new-wave/actions/workflows/ci.yml/badge.svg)](https://github.com/Pchambet/new-wave/actions/workflows/ci.yml)
+[![CI](https://github.com/Pchambet/clearborder-cbam/actions/workflows/ci.yml/badge.svg)](https://github.com/Pchambet/clearborder-cbam/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%E2%80%933.14-blue)
 
 ![A mass-based check passes a tube whose embedded emissions are 43 % estimated](docs/figures/estimation-cap.png)

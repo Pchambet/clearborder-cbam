@@ -21,6 +21,14 @@ from app.models import (
 )
 
 
+@pytest.fixture(autouse=True)
+def isolated_model_path(tmp_path, monkeypatch):
+    """Keep tests from reading or writing a classifier model inside the repository."""
+    from app import classifier
+
+    monkeypatch.setattr(classifier, "MODEL_PATH", tmp_path / "cn_classifier.pkl")
+
+
 @pytest.fixture(scope="function")
 def db_engine(tmp_path):
     """Moteur SQLite fichier temporaire, recréé pour chaque test."""

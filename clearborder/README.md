@@ -99,13 +99,6 @@ EEInpMat = Σ (M_i × SEE_i)
 - **AL** : Niveau d'activité (masse du produit)
 - **Règle 80/20** : ≥80% des données doivent être réelles pour les biens complexes
 
-## Déploiement (100 % gratuit)
-
-- **[DEPLOIEMENT-GRATUIT.md](DEPLOIEMENT-GRATUIT.md)** — Neon + Cloud Run, 0€
-- [DEPLOIEMENT.md](DEPLOIEMENT.md) — Guide complet (manuel + GitHub Actions)
-
----
-
 ## Licence
 
 Propriétaire — ClearBorder / New Wave

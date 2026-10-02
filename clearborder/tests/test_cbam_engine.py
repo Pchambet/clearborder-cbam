@@ -1,4 +1,4 @@
-"""Unit tests for the CBAM engine: SEE arithmetic, estimation cap, nested BOMs.
+"""Unit tests for the CBAM engine: SEE arithmetic, cap on estimates, nested BOMs.
 
 Every expected value is computed by hand in the comment next to it.
 """
@@ -163,10 +163,12 @@ class TestCalculateSeeRecursive:
         # nested SEE = 10/100 = 0.1; EE_InpMat = 100*0.1 = 10; SEE = 10/100 = 0.1
         assert calculate_see_recursive(bom)["see_per_kg"] == pytest.approx(0.1)
 
-    def test_precursor_without_see_or_bom_is_ignored(self):
+    def test_precursor_without_see_or_bom_raises(self):
+        """Missing data must fail loudly, not be dropped from embedded emissions."""
         bom = {
             "attr_em": 20,
             "activity_level": 10,
             "precursors": [{"mass_kg": 5, "see_per_kg": None, "is_real_data": False}],
         }
-        assert calculate_see_recursive(bom)["see_per_kg"] == pytest.approx(2.0)
+        with pytest.raises(ValueError, match="neither see_per_kg nor nested_bom"):
+            calculate_see_recursive(bom)

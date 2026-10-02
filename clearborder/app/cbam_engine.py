@@ -8,8 +8,8 @@ Specific embedded emissions of a good g:
 The functions here are pure (no I/O, no database) so the arithmetic can be tested
 against hand-computed cases and reused by the API, the scripts and the dashboard.
 
-Estimation cap. During the transitional period, Implementing Regulation (EU)
-2023/1773 lets a declarant use estimations, including default values, for complex
+Cap on estimates. During the transitional period, Implementing Regulation (EU)
+2023/1773 lets a declarant use estimates, including default values, for complex
 goods only as long as they stay within 20 % of the good's *total embedded
 emissions*. The cap is therefore measured on emissions, not on precursor mass: a
 light precursor with a high default SEE can breach it on its own. Direct
@@ -18,7 +18,7 @@ light precursor with a high default SEE can breach it on its own. Direct
 
 from dataclasses import dataclass, field
 
-MIN_ACTUAL_SHARE = 0.80  # i.e. estimations may cover at most 20 % of embedded emissions
+MIN_ACTUAL_SHARE = 0.80  # i.e. estimates may cover at most 20 % of embedded emissions
 
 
 @dataclass
@@ -48,7 +48,7 @@ def calculate_ee_inp_mat(precursors: list[PrecursorData]) -> tuple[float, float,
 
 
 def validate_80_20_rule(actual_emissions: float, total_emissions: float) -> tuple[bool, float]:
-    """Check the estimation cap on embedded emissions.
+    """Check the 20 % cap on estimates, measured on embedded emissions.
 
     Returns (compliant, share of total embedded emissions backed by actual data).
     A good with zero embedded emissions has nothing estimated and is compliant.
@@ -74,7 +74,7 @@ def calculate_see(data: ProductEmissionData) -> dict:
 
     warnings: list[str] = []
     compliant, real_data_ratio = True, 1.0
-    if data.precursors:  # the estimation cap only concerns complex goods
+    if data.precursors:  # the cap on estimates only concerns complex goods
         compliant, real_data_ratio = validate_80_20_rule(data.attr_em + actual_precursors, total)
         if not compliant:
             warnings.append(
@@ -98,25 +98,27 @@ def calculate_see_recursive(bom_tree: dict) -> dict:
     """Compute SEE for a nested bill of materials.
 
     A precursor whose ``see_per_kg`` is None takes the SEE computed from its own
-    ``nested_bom``; precursors with neither are ignored.
+    ``nested_bom``. A precursor with neither raises ValueError: dropping it would
+    understate embedded emissions and could turn a failing good into a passing one.
 
         {"attr_em": float, "activity_level": float,
          "precursors": [{"mass_kg": float, "see_per_kg": float | None,
                          "is_real_data": bool, "nested_bom": dict | None}]}
     """
     precursors = []
-    for p in bom_tree.get("precursors", []):
+    for i, p in enumerate(bom_tree.get("precursors", [])):
         see_per_kg = p.get("see_per_kg")
-        if see_per_kg is None and p.get("nested_bom"):
+        if see_per_kg is None:
+            if not p.get("nested_bom"):
+                raise ValueError(f"Precursor {i} has neither see_per_kg nor nested_bom")
             see_per_kg = calculate_see_recursive(p["nested_bom"])["see_per_kg"]
-        if see_per_kg is not None:
-            precursors.append(
-                PrecursorData(
-                    mass_kg=p["mass_kg"],
-                    see_per_kg=see_per_kg,
-                    is_real_data=p.get("is_real_data", False),
-                )
+        precursors.append(
+            PrecursorData(
+                mass_kg=p["mass_kg"],
+                see_per_kg=see_per_kg,
+                is_real_data=p.get("is_real_data", False),
             )
+        )
 
     return calculate_see(
         ProductEmissionData(

@@ -1,25 +1,26 @@
 # clearborder-cbam
 
 How much embedded CO2 does an imported steel or aluminium good carry under the EU Carbon Border
-Adjustment Mechanism (CBAM), and does its data meet the 20 % cap on estimates? A tested calculation
-engine, API and dashboard, built as an early prototype in spring 2026.
+Adjustment Mechanism (CBAM), and does its data meet the 20 % cap on estimates of the 2023–2025
+transitional period? A tested calculation engine, API and dashboard, built as an early prototype
+in spring 2026.
 
 [![CI](https://github.com/Pchambet/clearborder-cbam/actions/workflows/ci.yml/badge.svg)](https://github.com/Pchambet/clearborder-cbam/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%E2%80%933.14-blue)
 
 ![A mass-based check passes a tube whose embedded emissions are 43 % estimated](docs/figures/estimation-cap.png)
 
-> **Status.** Exploratory prototype (March 2026), reviewed and corrected in October 2026. The
-> exploration narrowed to landed-cost allocation for importers, which became
-> [FreightSight](https://github.com/Pchambet/freightsight-landed-cost). The project started with
-> a broader landed-cost scope; only the CBAM part was built here.
+> **Status.** Exploratory prototype (March 2026), reviewed and corrected in October 2026. Only
+> the CBAM part of a broader landed-cost exploration was built here; that exploration later
+> narrowed into [FreightSight](https://github.com/Pchambet/freightsight-landed-cost).
 
 ## TL;DR
 
 - **The engine** implements the specific-embedded-emissions formula of Regulation (EU) 2023/956,
-  Annex IV — `SEE = (AttrEm + Σ M_i · SEE_i) / AL` — including nested bills of materials, as pure
-  functions tested against hand-computed cases.
-- **The 20 % cap on estimates must be measured on emissions, not on mass.** On an illustrative
+  Annex IV — `SEE = (AttrEm + Σ M_i · SEE_i) / AL` — including nested bills of materials
+  (engine-level; the API and dashboard take a flat bill of materials), as pure functions tested
+  against hand-computed cases.
+- **The transitional-period 20 % cap on estimates must be measured on emissions, not on mass.** On an illustrative
   welded tube (figure above), 210 kg of 1,060 kg of coil comes from a supplier without data:
   19.8 % of precursor mass, but 43.4 % of the 1,113 kg CO2e embedded. A mass-based check passes
   it; the emissions-based check fails it. The cap is already breached once 7.3 % of the coil comes
@@ -54,8 +55,9 @@ flowchart LR
 
 1. **Data.** Installations, goods and precursors are stored in SQLite or PostgreSQL through a
    FastAPI service; a Streamlit dashboard is a thin client over it.
-2. **Method.** `app/cbam_engine.py` computes SEE recursively over the bill of materials and the
-   share of embedded emissions backed by actual data. Direct emissions count as actual data.
+2. **Method.** `app/cbam_engine.py` computes SEE over the bill of materials (recursively for
+   nested ones; the API and dashboard pass a flat list of precursors) and the share of embedded
+   emissions backed by actual data. Direct emissions count as actual data.
 3. **Decision.** Each good gets its SEE, its actual-data share and a pass/fail on the 80/20 rule;
    the report endpoint aggregates them into a simplified quarterly-report XML.
 
@@ -123,8 +125,9 @@ Developer notes, endpoints and configuration: [clearborder/README.md](clearborde
 ## Methodology notes and limitations
 
 - **Transitional-period rule.** The 20 % cap is the rule of the 2023–2025 transitional period
-  (until mid-2024 a broader use of default values was also tolerated). The definitive period that began on 1 January 2026 has its own provisions on actual versus
-  default values, which this prototype does not model.
+  (until 31 July 2024, default values could also be used without this limit). The definitive
+  period that began on 1 January 2026 has its own provisions on actual versus default values,
+  which this prototype does not model.
 - **Data quality is binary per precursor.** A precursor is either actual or estimated; partially
   documented precursors, and the data quality of nested bills of materials, are not propagated.
   A precursor with neither an SEE nor a nested bill of materials is rejected (`ValueError`) rather
@@ -156,7 +159,7 @@ dependency pins so the app installs on Python 3.11 to 3.14.
 - Regulation (EU) 2025/2083 amending Regulation (EU) 2023/956 (simplification: 50 t annual
   threshold, certificate timetable) — <https://eur-lex.europa.eu/eli/reg/2025/2083/oj>
 - Commission Implementing Regulation (EU) 2023/1773 (reporting obligations during the transitional
-  period) — <https://eur-lex.europa.eu/eli/reg/2023/1773/oj>
+  period) — <https://eur-lex.europa.eu/eli/reg_impl/2023/1773/oj>
 - European Commission, default values for the transitional period (December 2023) —
   <https://taxation-customs.ec.europa.eu/news/commission-publishes-default-values-determining-embedded-emissions-during-cbam-transitional-period-2023-12-22_en>
 

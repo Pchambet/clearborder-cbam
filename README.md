@@ -5,15 +5,15 @@ Adjustment Mechanism (CBAM), and does its data meet the 20 % cap on estimates? A
 engine, API and dashboard, built as an early prototype in spring 2026.
 
 [![CI](https://github.com/Pchambet/new-wave/actions/workflows/ci.yml/badge.svg)](https://github.com/Pchambet/new-wave/actions/workflows/ci.yml)
-![Python](https://img.shields.io/badge/python-3.11-blue)
+![Python](https://img.shields.io/badge/python-3.11%E2%80%933.14-blue)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ![A mass-based check passes a tube whose embedded emissions are 43 % estimated](docs/figures/estimation-cap.png)
 
 > **Status.** Exploratory prototype (March 2026), reviewed and corrected in October 2026. The
 > exploration narrowed to landed-cost allocation for importers, which became
-> [FreightSight](https://github.com/Pchambet/freightsight-landed-cost). Despite the original
-> "landed cost" tagline, no landed-cost calculation is implemented here.
+> [FreightSight](https://github.com/Pchambet/freightsight-landed-cost). The project started with
+> a broader landed-cost scope; only the CBAM part was built here.
 
 ## TL;DR
 
@@ -25,17 +25,16 @@ engine, API and dashboard, built as an early prototype in spring 2026.
   19.8 % of precursor mass, but 43.4 % of the 1,113 kg CO2e embedded. A mass-based check passes
   it; the emissions-based check fails it. The cap is already breached once 7.3 % of the coil comes
   from that supplier.
-- **The first version measured the cap on mass.** The review found this and two other defects
-  that the existing tests did not catch: the documented `API_KEYS="k1,k2"` setting crashed the app
-  at start-up, and the dashboard's report page crashed whenever a report was generated. All three are
-  fixed and covered by tests.
-- **78 tests, 96 % line coverage** of the application package, ruff-clean, about 10 s on a laptop;
+- **The first version checked the cap on mass.** An October 2026 self-review found this and two
+  crash bugs; all are fixed and covered by tests (see [Changes since the first version](#changes-since-the-first-version)).
+- **81 tests, 96 % line coverage** of the application package, ruff-clean, under a minute on a laptop;
   CI also builds the Docker image.
 
 ## Why it matters
 
-From 2026, most importers of CBAM goods (iron and steel, aluminium, cement, fertilisers, hydrogen,
-electricity) pay for the carbon embedded in what they import. The number they report is built from
+Since 1 January 2026, importers of more than 50 t a year of CBAM goods (iron and steel, aluminium,
+cement, fertilisers; hydrogen and electricity regardless of mass) are liable for the carbon embedded
+in what they import, settled with CBAM certificates from 2027. The number they report is built from
 supplier data of uneven quality, and during the 2023–2025 transitional period Implementing
 Regulation (EU) 2023/1773 allowed estimates for complex goods only up to 20 % of their total
 embedded emissions. A check on the wrong denominator gives a compliance answer that looks
@@ -48,7 +47,7 @@ flowchart LR
     A[Installation data<br/>direct emissions, activity level] --> C[CBAM engine<br/>pure functions]
     B[Bill of materials<br/>precursor mass, SEE, actual or estimated] --> C
     C --> D[SEE per good<br/>kg CO2e per kg]
-    C --> E[Estimation cap<br/>share of emissions from actual data]
+    C --> E[Cap on estimates<br/>share of emissions from actual data]
     D --> F[Quarterly report XML]
     E --> F
     G[Product description] --> H[CN code suggestions<br/>keywords or TF-IDF + logistic regression]
@@ -93,9 +92,9 @@ so no accuracy is claimed.
 
 ```bash
 cd clearborder
-python3.11 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate    # Python 3.11 to 3.14
 pip install -r requirements-dev.txt
-make lint test        # ruff + 78 tests, about 10 s
+make lint test        # ruff + 81 tests, under a minute
 make example          # regenerates docs/figures/estimation-cap.png and docs/worked-example.json
 ./run.sh              # API on :8000 and dashboard on :8501 with demo data
 ```
@@ -109,7 +108,7 @@ Developer notes, endpoints and configuration: [clearborder/README.md](clearborde
 .
 ├── clearborder/
 │   ├── app/
-│   │   ├── cbam_engine.py     # SEE and estimation cap (pure functions)
+│   │   ├── cbam_engine.py     # SEE and cap on estimates (pure functions)
 │   │   ├── classifier.py      # CN code suggestions
 │   │   ├── xml_generator.py   # report XML, structural and XSD validation
 │   │   ├── services.py        # glue between API, database and engine
@@ -129,6 +128,8 @@ Developer notes, endpoints and configuration: [clearborder/README.md](clearborde
   default values, which this prototype does not model.
 - **Data quality is binary per precursor.** A precursor is either actual or estimated; partially
   documented precursors, and the data quality of nested bills of materials, are not propagated.
+  A precursor with neither an SEE nor a nested bill of materials is rejected (`ValueError`) rather
+  than dropped, since dropping it would understate embedded emissions.
 - **Not the official format.** The report XML uses a project namespace and a simplified structure.
   It is not the CBAM Registry XSD and would be rejected by it; the XSD hook only validates against
   a schema you provide.
@@ -140,10 +141,21 @@ Developer notes, endpoints and configuration: [clearborder/README.md](clearborde
   and no deployment configuration; the Cloud Run workflow of the first version was removed because
   it never had credentials and failed on every push.
 
+### Changes since the first version
+
+An October 2026 self-review found three defects the original tests did not catch: the cap was
+checked on precursor mass instead of embedded emissions; the documented `API_KEYS="k1,k2"` setting
+crashed the app at start-up; and the dashboard's report page crashed whenever a report was
+generated. The same round fixed error handling (API errors were shown as "API unavailable" or as
+empty lists), stopped silently dropping precursors without data, and updated the January 2024
+dependency pins so the app installs on Python 3.11 to 3.14.
+
 ## References
 
 - Regulation (EU) 2023/956 establishing a carbon border adjustment mechanism, Annex IV —
   <https://eur-lex.europa.eu/eli/reg/2023/956/oj>
+- Regulation (EU) 2025/2083 amending Regulation (EU) 2023/956 (simplification: 50 t annual
+  threshold, certificate timetable) — <https://eur-lex.europa.eu/eli/reg/2025/2083/oj>
 - Commission Implementing Regulation (EU) 2023/1773 (reporting obligations during the transitional
   period) — <https://eur-lex.europa.eu/eli/reg/2023/1773/oj>
 - European Commission, default values for the transitional period (December 2023) —

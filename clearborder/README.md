@@ -7,7 +7,7 @@ emissions. See the [repository README](../README.md) for context, results and li
 
 ```bash
 cd clearborder
-python3.11 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate    # Python 3.11 to 3.14
 pip install -r requirements-dev.txt
 
 python scripts/seed_data.py                      # demo installation, product, CN codes
@@ -15,7 +15,7 @@ uvicorn app.main:app --reload --port 8000        # API, docs at http://localhost
 streamlit run dashboard/app.py --server.port 8501  # dashboard (second terminal)
 ```
 
-`./run.sh` does the same in one command. With containers:
+`./run.sh` does the same in one command (`PYTHON=python3.12 ./run.sh` to pick the interpreter). With containers:
 
 ```bash
 docker compose up                                # PostgreSQL + API + dashboard
@@ -27,7 +27,7 @@ docker compose -f docker-compose.sqlite.yml up   # lighter, SQLite only
 
 ```bash
 make lint       # ruff check + ruff format --check
-make test       # pytest (about 10 s)
+make test       # pytest (under a minute)
 make test-cov   # with coverage
 make example    # regenerate the README figure and docs/worked-example.json
 ```

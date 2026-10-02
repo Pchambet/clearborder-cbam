@@ -95,3 +95,10 @@ class TestValidateXmlAgainstXsd:
         valid, errors = validate_xml_against_xsd("<a>x</a>", str(xsd))
         assert valid is False
         assert errors
+
+    def test_broken_schema_is_reported(self, tmp_path):
+        xsd = tmp_path / "broken.xsd"
+        xsd.write_text("<xs:schema")
+        valid, errors = validate_xml_against_xsd("<a/>", str(xsd))
+        assert valid is False
+        assert errors[0].startswith("Invalid XSD")

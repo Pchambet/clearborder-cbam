@@ -4,8 +4,6 @@ The dashboard talks to the API over HTTP with ``requests``; here those calls are
 routed to the in-process FastAPI test client, so no server is needed.
 """
 
-from types import SimpleNamespace
-
 import pytest
 import requests
 from streamlit.testing.v1 import AppTest
@@ -16,19 +14,23 @@ PAGES = ["Home", "CN classification", "Installations", "Products", "CBAM report"
 
 @pytest.fixture
 def dashboard(seeded_client, monkeypatch):
-    def adapt(response):
-        return SimpleNamespace(
-            ok=response.is_success,
-            status_code=response.status_code,
-            text=response.text,
-            json=response.json,
-        )
+    class Response:
+        """Mimics requests.Response, including being falsy on 4xx/5xx."""
 
-    def fake_get(url, timeout=None):
-        return adapt(seeded_client.get(url.removeprefix(API_ROOT)))
+        def __init__(self, response):
+            self.ok = response.is_success
+            self.status_code = response.status_code
+            self.text = response.text
+            self.json = response.json
 
-    def fake_post(url, json=None, timeout=None):
-        return adapt(seeded_client.post(url.removeprefix(API_ROOT), json=json))
+        def __bool__(self):
+            return self.ok
+
+    def fake_get(url, headers=None, timeout=None):
+        return Response(seeded_client.get(url.removeprefix(API_ROOT), headers=headers))
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        return Response(seeded_client.post(url.removeprefix(API_ROOT), json=json, headers=headers))
 
     monkeypatch.delenv("API_BASE", raising=False)
     monkeypatch.setattr(requests, "get", fake_get)
@@ -56,3 +58,15 @@ def test_report_page_generates_report(dashboard):
     assert [s.value for s in at.success] == ["Report generated"]
     row = at.dataframe[-1].value.iloc[0]
     assert row["see_kg_co2_per_tonne"] == pytest.approx(1730.0)
+
+
+def test_api_errors_are_shown_not_masked(dashboard):
+    """A 4xx answer must surface the API's message, not "API unavailable"."""
+    at = dashboard("Installations")
+    at.text_input[0].input("Mill").run()
+    at.text_input[1].input("").run()  # country code too short: 422 from the API
+    at.button[0].click().run()
+    assert not at.exception, at.exception
+    errors = [e.value for e in at.error]
+    assert errors and "API unavailable" not in errors[0]
+    assert "country_code" in errors[0]

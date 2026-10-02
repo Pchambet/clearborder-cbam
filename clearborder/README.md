@@ -65,5 +65,6 @@ Environment variables (or a `.env` file, see `.env.example`):
 | `API_KEYS` | empty | Comma-separated keys for the `X-API-Key` header; empty disables auth |
 | `DEBUG` | `false` | Echo SQL statements |
 | `API_BASE` | `http://localhost:8000/api/v1` | Where the dashboard finds the API |
+| `API_KEY` | empty | Key the dashboard sends as `X-API-Key` when the API requires one |
 
 Tables are created at start-up (`create_all`); there are no migrations.

@@ -29,7 +29,7 @@ engine, API and dashboard, built as an early prototype in spring 2026.
   that the existing tests did not catch: the documented `API_KEYS="k1,k2"` setting crashed the app
   at start-up, and the dashboard's report page crashed whenever a report was generated. All three are
   fixed and covered by tests.
-- **76 tests, 96 % line coverage** of the application package, ruff-clean, about 10 s on a laptop;
+- **78 tests, 96 % line coverage** of the application package, ruff-clean, about 10 s on a laptop;
   CI also builds the Docker image.
 
 ## Why it matters
@@ -95,7 +95,7 @@ so no accuracy is claimed.
 cd clearborder
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
-make lint test        # ruff + 76 tests, about 10 s
+make lint test        # ruff + 78 tests, about 10 s
 make example          # regenerates docs/figures/estimation-cap.png and docs/worked-example.json
 ./run.sh              # API on :8000 and dashboard on :8501 with demo data
 ```

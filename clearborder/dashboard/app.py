@@ -18,18 +18,26 @@ st.title("ClearBorder — CBAM embedded emissions")
 st.caption("Specific embedded emissions (SEE) of imported goods — Regulation (EU) 2023/956, Annex IV")
 
 
+# Sent as X-API-Key when the API has keys configured (API_KEYS on the server side).
+HEADERS = {"X-API-Key": key} if (key := os.getenv("API_KEY")) else {}
+
+
 def api_get(path: str):
+    """JSON body on success, None when the API is unreachable or answers with an error."""
     try:
-        r = requests.get(f"{API_BASE}{path}", timeout=5)
+        r = requests.get(f"{API_BASE}{path}", headers=HEADERS, timeout=5)
         return r.json() if r.ok else None
     except requests.exceptions.ConnectionError:
         return None
 
 
 def api_post(path: str, json: dict):
+    """The response (even 4xx/5xx), or None when the API is unreachable.
+
+    Callers must test ``r is None``: a requests.Response is falsy on 4xx/5xx.
+    """
     try:
-        r = requests.post(f"{API_BASE}{path}", json=json, timeout=10)
-        return r
+        return requests.post(f"{API_BASE}{path}", json=json, headers=HEADERS, timeout=10)
     except requests.exceptions.ConnectionError:
         return None
 
@@ -71,7 +79,7 @@ elif page == "CN classification":
     if st.button("Suggest"):
         if desc.strip():
             r = api_post("/classify", {"description": desc, "top_k": 5})
-            if r and r.status_code == 200:
+            if r is not None and r.status_code == 200:
                 suggestions = r.json().get("suggestions", [])
                 if not suggestions:
                     st.info("No suggestion for this description.")
@@ -79,7 +87,7 @@ elif page == "CN classification":
                     st.markdown(
                         f"**{i}.** `{s.get('code', '')}` — score {s.get('confidence', 0):.2f} — *{s.get('description', '')}*"
                     )
-            elif r:
+            elif r is not None:
                 st.error(r.text)
             else:
                 st.error("API unavailable")
@@ -109,9 +117,9 @@ elif page == "Installations":
                     "emissions_per_tonne": float(emissions),
                 },
             )
-            if r and r.status_code == 200:
+            if r is not None and r.status_code == 200:
                 st.success("Installation created")
-            elif r:
+            elif r is not None:
                 st.error(r.text)
             else:
                 st.error("API unavailable")
@@ -161,9 +169,9 @@ elif page == "Products":
                     "precursors": precursors,
                 },
             )
-            if r and r.status_code == 200:
+            if r is not None and r.status_code == 200:
                 st.success("Product created")
-            elif r:
+            elif r is not None:
                 st.error(r.text)
             else:
                 st.error("API unavailable")
@@ -205,7 +213,7 @@ elif page == "CBAM report":
                 "/generate-cbam-report",
                 {"declarant_id": declarant_id, "reporting_period": period, "products": selected},
             )
-            if r and r.status_code == 200:
+            if r is not None and r.status_code == 200:
                 data = r.json()
                 st.success("Report generated")
                 st.dataframe(data.get("results", []), use_container_width=True)
@@ -215,7 +223,7 @@ elif page == "CBAM report":
                     file_name=f"cbam_report_{period}.xml",
                     mime="application/xml",
                 )
-            elif r:
+            elif r is not None:
                 st.error(r.text)
             else:
                 st.error("API unavailable")

@@ -97,7 +97,7 @@ def validate_xml_against_xsd(xml_content: str, xsd_path: str | None = None) -> t
 
     try:
         schema = etree.XMLSchema(etree.parse(str(path)))
-    except etree.XMLSchemaParseError as e:
+    except (etree.XMLSchemaParseError, etree.XMLSyntaxError) as e:
         return False, [f"Invalid XSD: {e}"]
     try:
         schema.assertValid(etree.fromstring(xml_content.encode("utf-8")))

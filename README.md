@@ -6,7 +6,6 @@ engine, API and dashboard, built as an early prototype in spring 2026.
 
 [![CI](https://github.com/Pchambet/new-wave/actions/workflows/ci.yml/badge.svg)](https://github.com/Pchambet/new-wave/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%E2%80%933.14-blue)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ![A mass-based check passes a tube whose embedded emissions are 43 % estimated](docs/figures/estimation-cap.png)
 

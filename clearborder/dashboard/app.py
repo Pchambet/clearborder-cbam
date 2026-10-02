@@ -1,23 +1,21 @@
-"""
-ClearBorder Dashboard — Interface de gestion CBAM
-"""
-import os
-import streamlit as st
-import requests
-from decimal import Decimal
+"""ClearBorder dashboard: a thin Streamlit client over the API."""
 
-# API_BASE depuis env (docker) ou localhost par défaut
+import os
+
+import requests
+import streamlit as st
+
+# API_BASE from the environment (docker compose) or localhost
 API_BASE = os.getenv("API_BASE", "http://localhost:8000/api/v1")
 HEALTH_URL = os.getenv("API_BASE", "http://localhost:8000").replace("/api/v1", "") + "/health"
 
 st.set_page_config(
     page_title="ClearBorder — CBAM Compliance",
-    page_icon="📦",
     layout="wide",
 )
 
-st.title("📦 ClearBorder — Moteur CBAM")
-st.caption("Calcul des Specific Embedded Emissions (SEE) — Règlement UE 2023/956")
+st.title("ClearBorder — CBAM embedded emissions")
+st.caption("Specific embedded emissions (SEE) of imported goods — Regulation (EU) 2023/956, Annex IV")
 
 
 def api_get(path: str):
@@ -37,115 +35,123 @@ def api_post(path: str, json: dict):
 
 
 # Sidebar
+SECTORS = ["iron_steel", "aluminium", "cement", "fertilisers", "hydrogen", "electricity"]
+
 st.sidebar.header("Navigation")
 page = st.sidebar.radio(
     "Menu",
-    ["🏠 Accueil", "🔍 Classification CN", "🏭 Installations", "📦 Produits", "📄 Rapport CBAM", "⚙️ À propos"],
+    ["Home", "CN classification", "Installations", "Products", "CBAM report", "About"],
 )
 
-# Check API health
+# API health
 try:
     h = requests.get(HEALTH_URL, timeout=2)
     if not h.ok:
-        st.sidebar.warning("⚠️ API non disponible")
-except Exception:
-    st.sidebar.warning("⚠️ Lancez l'API ou définissez API_BASE pour un déploiement distant")
+        st.sidebar.warning("API unavailable")
+except requests.exceptions.RequestException:
+    st.sidebar.warning("Start the API, or set API_BASE to point at a running one")
 
-if page == "🏠 Accueil":
-    st.header("Bienvenue sur ClearBorder")
+if page == "Home":
+    st.header("How it works")
     st.markdown("""
-    **ClearBorder** calcule automatiquement les émissions intégrées spécifiques (SEE) 
-    pour vos importations soumises au CBAM (Mécanisme d'Ajustement Carbone aux Frontières).
-    
-    ### Fonctionnalités
-    - **Installations** : Gérez vos fournisseurs et leurs données d'émissions
-    - **Produits** : Déclarez vos produits avec leur BOM (précurseurs)
-    - **Rapport CBAM** : Générez le XML trimestriel conforme au schéma TAXUD
-    
-    ### Démarrage rapide
-    1. Créez une installation (fournisseur hors-UE)
-    2. Ajoutez un produit avec ses précurseurs
-    3. Générez le rapport CBAM
+    ClearBorder computes the specific embedded emissions (SEE) of goods covered by the
+    EU Carbon Border Adjustment Mechanism and checks the 20 % cap on estimated data.
+
+    1. **Installations**: register the non-EU producer.
+    2. **Products**: declare a good, its direct emissions and its precursors.
+    3. **CBAM report**: compute SEE and export a simplified quarterly-report XML
+       (not the official CBAM Registry schema).
     """)
 
-elif page == "🔍 Classification CN":
-    st.header("Classification automatique CN")
-    st.caption("Suggère des codes nomenclature à partir d'une description produit (ML)")
-    
-    desc = st.text_area("Description du produit", placeholder="Ex: Tôle d'acier laminée à chaud, épaisseur 2mm")
-    if st.button("Classifier"):
+elif page == "CN classification":
+    st.header("CN code suggestions")
+    st.caption("Keyword heuristic, or a TF-IDF model once trained. Suggestions need expert review.")
+
+    desc = st.text_area("Product description", placeholder="e.g. hot-rolled steel plate, 2 mm")
+    if st.button("Suggest"):
         if desc.strip():
             r = api_post("/classify", {"description": desc, "top_k": 5})
             if r and r.status_code == 200:
-                data = r.json()
-                for i, s in enumerate(data.get("suggestions", []), 1):
-                    st.markdown(f"**{i}.** `{s.get('code', '')}` — {s.get('confidence', 0)*100:.0f}% — *{s.get('description', '')}*")
+                suggestions = r.json().get("suggestions", [])
+                if not suggestions:
+                    st.info("No suggestion for this description.")
+                for i, s in enumerate(suggestions, 1):
+                    st.markdown(
+                        f"**{i}.** `{s.get('code', '')}` — score {s.get('confidence', 0):.2f} — *{s.get('description', '')}*"
+                    )
             elif r:
                 st.error(r.text)
             else:
-                st.error("API non disponible")
+                st.error("API unavailable")
         else:
-            st.warning("Entrez une description")
-    
+            st.warning("Enter a description")
+
     cn_codes = api_get("/cn-codes")
     if cn_codes:
-        with st.expander("📋 Codes CN disponibles"):
+        with st.expander("Loaded CN codes"):
             st.dataframe(cn_codes, use_container_width=True)
 
-elif page == "🏭 Installations":
-    st.header("Installations (fournisseurs)")
-    
-    with st.expander("➕ Nouvelle installation"):
-        with st.form("new_installation"):
-            name = st.text_input("Nom")
-            country = st.text_input("Pays (code ISO)", "TR", max_chars=2)
-            sector = st.selectbox("Secteur", ["iron_steel", "aluminium", "cement", "fertilisers", "hydrogen", "electricity"])
-            emissions = st.number_input("Émissions (tCO2e/tonne)", min_value=0.0, value=1.5, step=0.1)
-            if st.form_submit_button("Créer"):
-                r = api_post("/installations", {
+elif page == "Installations":
+    st.header("Installations (non-EU producers)")
+
+    with st.expander("New installation"), st.form("new_installation"):
+        name = st.text_input("Name")
+        country = st.text_input("Country (ISO alpha-2)", "TR", max_chars=2)
+        sector = st.selectbox("Sector", SECTORS)
+        emissions = st.number_input("Emissions (t CO2e per t)", min_value=0.0, value=1.5, step=0.1)
+        if st.form_submit_button("Create"):
+            r = api_post(
+                "/installations",
+                {
                     "name": name,
                     "country_code": country.upper(),
                     "sector": sector,
                     "emissions_per_tonne": float(emissions),
-                })
-                if r and r.status_code == 200:
-                    st.success("Installation créée !")
-                elif r:
-                    st.error(r.text)
-                else:
-                    st.error("API non disponible")
-    
+                },
+            )
+            if r and r.status_code == 200:
+                st.success("Installation created")
+            elif r:
+                st.error(r.text)
+            else:
+                st.error("API unavailable")
+
     data = api_get("/installations")
     if data:
         st.dataframe(data, use_container_width=True)
     else:
-        st.info("Aucune installation. Créez-en une ci-dessus.")
+        st.info("No installation yet. Create one above.")
 
-elif page == "📦 Produits":
-    st.header("Produits")
-    
+elif page == "Products":
+    st.header("Products")
+
     installations = api_get("/installations") or []
     inst_map = {str(i["id"]): i["name"] for i in installations}
-    
-    with st.expander("➕ Nouveau produit"):
-        with st.form("new_product"):
-            name = st.text_input("Nom du produit")
-            cn_code = st.text_input("Code CN (8 chiffres)", "7208 10 00")
-            sector = st.selectbox("Secteur", ["iron_steel", "aluminium", "cement", "fertilisers", "hydrogen", "electricity"])
-            inst_id = st.selectbox("Installation", options=list(inst_map.keys()), format_func=lambda x: inst_map.get(x, x))
-            activity = st.number_input("Masse totale (kg)", min_value=0.1, value=1000.0)
-            attr_em = st.number_input("Émissions attribuées processus (kg CO2e)", min_value=0.0, value=0.0)
-            
-            st.subheader("Précurseurs (optionnel)")
-            p1_mass = st.number_input("Précurseur 1 — Masse (kg)", min_value=0.0, value=0.0)
-            p1_see = st.number_input("Précurseur 1 — SEE (kg CO2e/kg)", min_value=0.0, value=0.0)
-            p1_real = st.checkbox("Précurseur 1 — Données réelles", False)
-            
-            if st.form_submit_button("Créer"):
-                precursors = []
-                if p1_mass > 0:
-                    precursors.append({"mass_kg": float(p1_mass), "see_per_kg": float(p1_see), "is_real_data": p1_real})
-                r = api_post("/products", {
+
+    with st.expander("New product"), st.form("new_product"):
+        name = st.text_input("Product name")
+        cn_code = st.text_input("CN code", "7208 10 00")
+        sector = st.selectbox("Sector", SECTORS)
+        inst_id = st.selectbox(
+            "Installation", options=list(inst_map.keys()), format_func=lambda x: inst_map.get(x, x)
+        )
+        activity = st.number_input("Activity level: mass produced (kg)", min_value=0.1, value=1000.0)
+        attr_em = st.number_input("Direct (attributed) emissions (kg CO2e)", min_value=0.0, value=0.0)
+
+        st.subheader("Precursor (optional)")
+        p1_mass = st.number_input("Precursor mass (kg)", min_value=0.0, value=0.0)
+        p1_see = st.number_input("Precursor SEE (kg CO2e/kg)", min_value=0.0, value=0.0)
+        p1_real = st.checkbox("Precursor SEE is actual installation data", False)
+
+        if st.form_submit_button("Create"):
+            precursors = []
+            if p1_mass > 0:
+                precursors.append(
+                    {"mass_kg": float(p1_mass), "see_per_kg": float(p1_see), "is_real_data": p1_real}
+                )
+            r = api_post(
+                "/products",
+                {
                     "name": name,
                     "cn_code": cn_code.replace(" ", ""),
                     "sector": sector,
@@ -153,72 +159,73 @@ elif page == "📦 Produits":
                     "activity_level": float(activity),
                     "attributed_emissions": float(attr_em),
                     "precursors": precursors,
-                })
-                if r and r.status_code == 200:
-                    st.success("Produit créé !")
-                elif r:
-                    st.error(r.text)
-                else:
-                    st.error("API non disponible")
-    
+                },
+            )
+            if r and r.status_code == 200:
+                st.success("Product created")
+            elif r:
+                st.error(r.text)
+            else:
+                st.error("API unavailable")
+
     data = api_get("/products")
     if data:
         st.dataframe(data, use_container_width=True)
     else:
-        st.info("Aucun produit. Créez-en un ci-dessus.")
+        st.info("No product yet. Create one above.")
 
-elif page == "📄 Rapport CBAM":
-    st.header("Générer un rapport CBAM")
-    
+elif page == "CBAM report":
+    st.header("Quarterly CBAM report")
+
     products = api_get("/products") or []
-    
+
     if not products:
-        st.info("Ajoutez des produits avant de générer un rapport.")
+        st.info("Add products before generating a report.")
     else:
         with st.form("cbam_report"):
-            declarant_id = st.text_input("ID Déclarant CBAM", "EU-CBAM-2026-001")
-            period = st.text_input("Période", "2026-Q1")
-            
-            st.subheader("Produits à inclure")
+            declarant_id = st.text_input("Declarant ID", "EU-CBAM-2026-001")
+            period = st.text_input("Period", "2026-Q1")
+
+            st.subheader("Products to include")
             selected = []
             for p in products:
                 qty = st.number_input(
-                    f"{p.get('name', '')} ({p.get('cn_code', '')}) — Quantité (tonnes)",
+                    f"{p.get('name', '')} ({p.get('cn_code', '')}) — quantity (t)",
                     min_value=0.01,
                     value=1.0,
                     key=f"qty_{p['id']}",
                 )
                 selected.append({"product_id": p["id"], "quantity_tonnes": float(qty)})
-            
-            if st.form_submit_button("Générer le rapport"):
-                r = api_post("/generate-cbam-report", {
-                    "declarant_id": declarant_id,
-                    "reporting_period": period,
-                    "products": selected,
-                })
-                if r and r.status_code == 200:
-                    data = r.json()
-                    st.success("Rapport généré !")
-                    st.json(data.get("results", []))
-                    st.download_button(
-                        "Télécharger XML",
-                        data.get("xml_content", ""),
-                        file_name=f"cbam_report_{period}.xml",
-                        mime="application/xml",
-                    )
-                elif r:
-                    st.error(r.text)
-                else:
-                    st.error("API non disponible")
+
+            submitted = st.form_submit_button("Generate report")
+
+        # Results are rendered outside the form: Streamlit forbids download buttons inside one.
+        if submitted:
+            r = api_post(
+                "/generate-cbam-report",
+                {"declarant_id": declarant_id, "reporting_period": period, "products": selected},
+            )
+            if r and r.status_code == 200:
+                data = r.json()
+                st.success("Report generated")
+                st.dataframe(data.get("results", []), use_container_width=True)
+                st.download_button(
+                    "Download XML",
+                    data.get("xml_content", ""),
+                    file_name=f"cbam_report_{period}.xml",
+                    mime="application/xml",
+                )
+            elif r:
+                st.error(r.text)
+            else:
+                st.error("API unavailable")
 
 else:
-    st.header("À propos")
+    st.header("About")
     st.markdown("""
-    **ClearBorder** v0.1.0 — MVP RegTech
-    
-    - Calcul SEE conforme Annexe IV Règlement (UE) 2023/956
-    - Règle 80/20 pour biens complexes
-    - Export XML pour le portail CBAM
-    
-    *Développé dans le cadre du projet New Wave*
+    **ClearBorder** v0.1.0 — prototype, spring 2026.
+
+    - SEE per Annex IV of Regulation (EU) 2023/956, including nested bills of materials
+    - 20 % cap on estimated data for complex goods, measured on embedded emissions
+    - Simplified quarterly-report XML (not the official CBAM Registry schema)
     """)

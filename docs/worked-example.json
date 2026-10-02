@@ -1,0 +1,17 @@
+{
+  "inputs": {
+    "output_kg": 1000.0,
+    "direct_emissions_kg_co2e": 120.0,
+    "coil_kg": 1060.0,
+    "see_supplier_a_actual": 0.6,
+    "see_supplier_b_estimated": 2.3,
+    "supplier_b_kg": 210.0
+  },
+  "see_kg_co2e_per_kg": 1.113,
+  "total_embedded_emissions_kg_co2e": 1113.0,
+  "estimated_share_by_mass": 0.1981,
+  "estimated_share_by_emissions": 0.434,
+  "compliant_by_mass": true,
+  "compliant_by_emissions": false,
+  "breach_supplier_b_mass_share": 0.0728
+}

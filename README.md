@@ -1,4 +1,4 @@
-# new-wave — ClearBorder
+# clearborder-cbam — ClearBorder
 
 How much embedded CO2 does an imported steel or aluminium good carry under the EU Carbon Border
 Adjustment Mechanism (CBAM), and does its data meet the 20 % cap on estimates? A tested calculation

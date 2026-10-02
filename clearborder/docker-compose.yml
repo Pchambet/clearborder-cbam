@@ -1,6 +1,5 @@
-# ClearBorder - Développement local (PostgreSQL)
-# Sur Mac : OrbStack recommandé (plus léger que Docker Desktop)
-# Usage: docker compose up
+# ClearBorder with PostgreSQL, for local development.
+# Usage: docker compose up   (then `make seed` once)
 # API: http://localhost:8000  |  Dashboard: http://localhost:8501
 
 services:

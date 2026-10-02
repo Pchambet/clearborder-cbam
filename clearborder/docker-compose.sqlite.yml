@@ -1,6 +1,5 @@
-# ClearBorder — Mode SQLite uniquement (sans PostgreSQL)
+# ClearBorder with SQLite only (no PostgreSQL container).
 # Usage: docker compose -f docker-compose.sqlite.yml up
-# Plus léger, démarrage rapide. Pour dev sans postgres.
 
 services:
   api:

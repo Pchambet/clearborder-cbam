@@ -11,5 +11,5 @@ ENV DATABASE_URL=sqlite:///./clearborder.db
 
 EXPOSE 8080
 
-# Cloud Run utilise PORT=8080 par défaut
+# PORT defaults to 8080 (the Cloud Run convention)
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

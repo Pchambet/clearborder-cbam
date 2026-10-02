@@ -1,205 +1,127 @@
-"""
-Moteur de calcul CBAM - Specific Embedded Emissions (SEE)
-Conforme à l'Annexe IV du Règlement (UE) 2023/956
+"""CBAM embedded-emissions engine (Regulation (EU) 2023/956, Annex IV).
 
-Formules:
-- SEE_g = (AttrEm_g + EEInpMat) / AL_g
-- EEInpMat = Σ (M_i × SEE_i) pour chaque précurseur
+Specific embedded emissions of a good g:
+
+    SEE_g = (AttrEm_g + EE_InpMat) / AL_g
+    EE_InpMat = sum_i M_i * SEE_i        (over the relevant precursors i)
+
+The functions here are pure (no I/O, no database) so the arithmetic can be tested
+against hand-computed cases and reused by the API, the scripts and the dashboard.
+
+Estimation cap. During the transitional period, Implementing Regulation (EU)
+2023/1773 lets a declarant use estimations, including default values, for complex
+goods only as long as they stay within 20 % of the good's *total embedded
+emissions*. The cap is therefore measured on emissions, not on precursor mass: a
+light precursor with a high default SEE can breach it on its own. Direct
+(attributed) emissions are installation data and count as actual data.
 """
 
-from decimal import Decimal
-from typing import Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+MIN_ACTUAL_SHARE = 0.80  # i.e. estimations may cover at most 20 % of embedded emissions
 
 
 @dataclass
 class PrecursorData:
-    """Données d'un précurseur dans le BOM"""
+    """One precursor line of a bill of materials."""
+
     mass_kg: float
-    see_per_kg: float  # Émissions spécifiques en kg CO2e/kg
-    is_real_data: bool  # True = données réelles, False = valeur par défaut
+    see_per_kg: float  # specific embedded emissions of the precursor, kg CO2e/kg
+    is_real_data: bool  # True = installation data, False = estimate or default value
 
 
 @dataclass
 class ProductEmissionData:
-    """Données d'émission pour le calcul SEE"""
-    attr_em: float  # Émissions attribuées au processus de production (kg CO2e)
-    activity_level: float  # AL_g - niveau d'activité ou masse totale (kg)
-    precursors: list[PrecursorData]
-    installation_id: Optional[str] = None
+    """Inputs needed to compute the SEE of one good."""
+
+    attr_em: float  # emissions attributed to the production process, kg CO2e
+    activity_level: float  # AL_g, mass of good produced, kg
+    precursors: list[PrecursorData] = field(default_factory=list)
+    installation_id: str | None = None
 
 
 def calculate_ee_inp_mat(precursors: list[PrecursorData]) -> tuple[float, float, float]:
-    """
-    Calcule EEInpMat = Σ (M_i × SEE_i)
-    Retourne (EEInpMat, masse_totale_reelle, masse_totale_defaut) pour la règle 80/20
-    """
-    ee_inp_mat = 0.0
-    mass_real = 0.0
-    mass_default = 0.0
-    
-    for p in precursors:
-        contribution = p.mass_kg * p.see_per_kg
-        ee_inp_mat += contribution
-        if p.is_real_data:
-            mass_real += p.mass_kg
-        else:
-            mass_default += p.mass_kg
-    
-    return ee_inp_mat, mass_real, mass_default
+    """Return (EE_InpMat, emissions from actual data, emissions from estimates), kg CO2e."""
+    actual = sum(p.mass_kg * p.see_per_kg for p in precursors if p.is_real_data)
+    estimated = sum(p.mass_kg * p.see_per_kg for p in precursors if not p.is_real_data)
+    return actual + estimated, actual, estimated
 
 
-def validate_80_20_rule(mass_real: float, mass_total: float) -> tuple[bool, float]:
+def validate_80_20_rule(actual_emissions: float, total_emissions: float) -> tuple[bool, float]:
+    """Check the estimation cap on embedded emissions.
+
+    Returns (compliant, share of total embedded emissions backed by actual data).
+    A good with zero embedded emissions has nothing estimated and is compliant.
     """
-    Règle 80/20 : au moins 80% des données doivent provenir de valeurs réelles
-    pour les biens complexes.
-    Retourne (conforme, ratio_réel)
-    """
-    if mass_total == 0:
-        return False, 0.0
-    ratio = mass_real / mass_total
-    return ratio >= 0.80, ratio
+    if total_emissions <= 0:
+        return True, 1.0
+    share = actual_emissions / total_emissions
+    return share >= MIN_ACTUAL_SHARE, share
 
 
 def calculate_see(data: ProductEmissionData) -> dict:
+    """Compute the specific embedded emissions (SEE) of one good.
+
+    Returns a dict with see_per_kg, ee_inp_mat, attr_em, activity_level,
+    total_emissions_kg_co2e, real_data_ratio (share of embedded emissions from
+    actual data), rule_80_20_compliant and warnings.
     """
-    Calcule les Specific Embedded Emissions (SEE) pour un bien.
-    
-    SEE_g = (AttrEm_g + EEInpMat) / AL_g
-    
-    Retourne un dict avec:
-    - see_per_kg: émissions spécifiques en kg CO2e/kg
-    - ee_inp_mat: émissions des précurseurs
-    - attr_em: émissions du processus
-    - activity_level: niveau d'activité
-    - rule_80_20_compliant: conformité règle 80/20
-    - real_data_ratio: ratio des données réelles
-    - warnings: liste d'alertes
-    """
-    warnings = []
-    
-    # Calcul EEInpMat
-    ee_inp_mat, mass_real, mass_default = calculate_ee_inp_mat(data.precursors)
-    mass_total_precursors = mass_real + mass_default
-    
-    # Règle 80/20 pour biens complexes (avec précurseurs)
-    rule_80_20_compliant = True
-    real_data_ratio = 1.0
-    
-    if data.precursors:
-        rule_80_20_compliant, real_data_ratio = validate_80_20_rule(
-            mass_real, mass_total_precursors
-        )
-        if not rule_80_20_compliant:
-            warnings.append(
-                f"Règle 80/20 non respectée: {real_data_ratio*100:.1f}% de données réelles "
-                f"(minimum 80% requis pour les biens complexes)"
-            )
-    
-    # Calcul SEE
-    numerator = data.attr_em + ee_inp_mat
     if data.activity_level <= 0:
-        raise ValueError("Le niveau d'activité (AL_g) doit être strictement positif")
-    
-    see_per_kg = numerator / data.activity_level
-    
+        raise ValueError("Activity level (AL_g) must be strictly positive")
+
+    ee_inp_mat, actual_precursors, _ = calculate_ee_inp_mat(data.precursors)
+    total = data.attr_em + ee_inp_mat
+
+    warnings: list[str] = []
+    compliant, real_data_ratio = True, 1.0
+    if data.precursors:  # the estimation cap only concerns complex goods
+        compliant, real_data_ratio = validate_80_20_rule(data.attr_em + actual_precursors, total)
+        if not compliant:
+            warnings.append(
+                f"80/20 rule not met: {real_data_ratio * 100:.1f}% of embedded emissions "
+                "come from actual data (at least 80% required for complex goods)"
+            )
+
     return {
-        "see_per_kg": round(see_per_kg, 6),
+        "see_per_kg": round(total / data.activity_level, 6),
         "ee_inp_mat": round(ee_inp_mat, 6),
         "attr_em": data.attr_em,
         "activity_level": data.activity_level,
-        "rule_80_20_compliant": rule_80_20_compliant,
+        "rule_80_20_compliant": compliant,
         "real_data_ratio": round(real_data_ratio, 4),
         "warnings": warnings,
-        "total_emissions_kg_co2e": round(numerator, 6),
+        "total_emissions_kg_co2e": round(total, 6),
     }
 
 
 def calculate_see_recursive(bom_tree: dict) -> dict:
+    """Compute SEE for a nested bill of materials.
+
+    A precursor whose ``see_per_kg`` is None takes the SEE computed from its own
+    ``nested_bom``; precursors with neither are ignored.
+
+        {"attr_em": float, "activity_level": float,
+         "precursors": [{"mass_kg": float, "see_per_kg": float | None,
+                         "is_real_data": bool, "nested_bom": dict | None}]}
     """
-    Calcule SEE de manière récursive pour un arbre de BOM (Bill of Materials).
-    
-    bom_tree structure:
-    {
-        "attr_em": float,
-        "activity_level": float,
-        "precursors": [
-            {
-                "mass_kg": float,
-                "see_per_kg": float | None,  # Si None, calcul récursif
-                "is_real_data": bool,
-                "nested_bom": dict | None  # BOM du précurseur si see_per_kg est None
-            }
-        ]
-    }
-    """
-    precursors_data = []
-    
+    precursors = []
     for p in bom_tree.get("precursors", []):
         see_per_kg = p.get("see_per_kg")
         if see_per_kg is None and p.get("nested_bom"):
-            # Calcul récursif
-            nested_result = calculate_see_recursive(p["nested_bom"])
-            see_per_kg = nested_result["see_per_kg"]
-        
+            see_per_kg = calculate_see_recursive(p["nested_bom"])["see_per_kg"]
         if see_per_kg is not None:
-            precursors_data.append(PrecursorData(
-                mass_kg=p["mass_kg"],
-                see_per_kg=see_per_kg,
-                is_real_data=p.get("is_real_data", False)
-            ))
-    
-    data = ProductEmissionData(
-        attr_em=bom_tree.get("attr_em", 0),
-        activity_level=bom_tree["activity_level"],
-        precursors=precursors_data
+            precursors.append(
+                PrecursorData(
+                    mass_kg=p["mass_kg"],
+                    see_per_kg=see_per_kg,
+                    is_real_data=p.get("is_real_data", False),
+                )
+            )
+
+    return calculate_see(
+        ProductEmissionData(
+            attr_em=bom_tree.get("attr_em", 0),
+            activity_level=bom_tree["activity_level"],
+            precursors=precursors,
+        )
     )
-    
-    return calculate_see(data)
-
-
-class CBAMCalculator:
-    """Calculateur SEE qui travaille avec les modèles SQLAlchemy."""
-
-    def __init__(self, db_session=None):
-        self.db = db_session
-
-    def calculate_see(self, product) -> "CBAMCalculationResult":
-        """
-        Calcule SEE pour un Product (modèle SQLAlchemy).
-        Retourne un objet avec see_kg_co2_per_tonne, real_data_ratio, compliant_80_20.
-        """
-        precursors_data = []
-        for prec in product.precursors:
-            precursors_data.append(PrecursorData(
-                mass_kg=float(prec.mass_kg),
-                see_per_kg=float(prec.see_per_kg),
-                is_real_data=prec.is_real_data,
-            ))
-
-        data = ProductEmissionData(
-            attr_em=float(product.attributed_emissions or 0),
-            activity_level=float(product.activity_level),
-            precursors=precursors_data,
-        )
-        result = calculate_see(data)
-
-        # SEE en kg CO2e/tonne (activity_level en kg, donc * 1000)
-        see_per_tonne = result["see_per_kg"] * 1000
-
-        return CBAMCalculationResult(
-            see_kg_co2_per_tonne=see_per_tonne,
-            real_data_ratio=result["real_data_ratio"],
-            compliant_80_20=result["rule_80_20_compliant"],
-            warnings=result["warnings"],
-        )
-
-
-class CBAMCalculationResult:
-    """Résultat du calcul SEE pour un produit."""
-    def __init__(self, see_kg_co2_per_tonne: float, real_data_ratio: float,
-                 compliant_80_20: bool, warnings: list = None):
-        self.see_kg_co2_per_tonne = see_kg_co2_per_tonne
-        self.real_data_ratio = real_data_ratio
-        self.compliant_80_20 = compliant_80_20
-        self.warnings = warnings or []

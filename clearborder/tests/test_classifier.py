@@ -51,7 +51,7 @@ class TestClassify:
     def test_default_path_is_isolated_in_tests(self):
         # conftest redirects MODEL_PATH so the test suite never writes into models/
         repo_model = Path(classifier.__file__).parent.parent / "models" / "cn_classifier.pkl"
-        assert classifier.MODEL_PATH != repo_model
+        assert repo_model != classifier.MODEL_PATH
 
 
 class TestTrainClassifier:

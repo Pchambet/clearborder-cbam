@@ -1,23 +1,28 @@
 """
-Fixtures pytest partagées — base de données de test, client API, données.
+Shared fixtures: temporary database, API client, sample data.
 """
+
 import sys
 from pathlib import Path
 
-# Ajouter le répertoire parent au path pour importer app
+# make the app package importable without installing it
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from decimal import Decimal
+
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from fastapi.testclient import TestClient
 
 from app.database import Base, get_db
 from app.main import app
 from app.models import (
-    Installation, Product, ProductPrecursor,
-    DefaultEmissionFactor, CNCode,
+    CNCode,
+    DefaultEmissionFactor,
+    Installation,
+    Product,
+    ProductPrecursor,
 )
 
 
@@ -31,7 +36,7 @@ def isolated_model_path(tmp_path, monkeypatch):
 
 @pytest.fixture(scope="function")
 def db_engine(tmp_path):
-    """Moteur SQLite fichier temporaire, recréé pour chaque test."""
+    """Temporary SQLite file, recreated for each test."""
     db_file = tmp_path / "test.db"
     url = f"sqlite:///{db_file}"
     engine = create_engine(url, connect_args={"check_same_thread": False})
@@ -42,7 +47,7 @@ def db_engine(tmp_path):
 
 @pytest.fixture(scope="function")
 def db_session(db_engine):
-    """Session DB isolée par test."""
+    """Database session isolated per test."""
     Session = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
     session = Session()
     try:
@@ -55,7 +60,8 @@ def db_session(db_engine):
 def client(db_engine):
     """Client HTTP TestClient avec DB de test."""
     from app import database
-    # Patcher l'engine pour que init_db crée les tables sur la DB de test
+
+    # point the app's engine at the test database so init_db creates tables there
     original_engine = database.engine
     original_session_local = database.SessionLocal
     database.engine = db_engine
@@ -85,9 +91,9 @@ def client(db_engine):
 
 @pytest.fixture
 def sample_installation(db_session):
-    """Installation de test — aciérie Turquie."""
+    """Test installation: a steel mill in Turkey."""
     inst = Installation(
-        name="Test Aciérie TR",
+        name="Test steel mill TR",
         country_code="TR",
         sector="iron_steel",
         emissions_per_tonne=Decimal("1.65"),
@@ -100,25 +106,27 @@ def sample_installation(db_session):
 
 @pytest.fixture
 def sample_product(db_session, sample_installation):
-    """Produit de test avec précurseur."""
+    """Complex good with one precursor (actual data)."""
     prod = Product(
-        name="Tôle acier laminée",
+        name="Hot-rolled steel plate",
         cn_code="7208",
         sector="iron_steel",
         installation_id=sample_installation.id,
-        activity_level=Decimal("1000"),
-        attributed_emissions=Decimal("50"),
+        activity_level=Decimal(1000),
+        attributed_emissions=Decimal(50),
     )
     db_session.add(prod)
     db_session.commit()
     db_session.refresh(prod)
-    
-    db_session.add(ProductPrecursor(
-        product_id=prod.id,
-        mass_kg=Decimal("1050"),
-        see_per_kg=Decimal("1.6"),
-        is_real_data=True,
-    ))
+
+    db_session.add(
+        ProductPrecursor(
+            product_id=prod.id,
+            mass_kg=Decimal(1050),
+            see_per_kg=Decimal("1.6"),
+            is_real_data=True,
+        )
+    )
     db_session.commit()
     db_session.refresh(prod)
     return prod
@@ -126,14 +134,14 @@ def sample_product(db_session, sample_installation):
 
 @pytest.fixture
 def sample_product_simple(db_session, sample_installation):
-    """Produit simple sans précurseur."""
+    """Simple good without precursors."""
     prod = Product(
-        name="Billettes acier",
+        name="Steel billets",
         cn_code="7207",
         sector="iron_steel",
         installation_id=sample_installation.id,
-        activity_level=Decimal("500"),
-        attributed_emissions=Decimal("100"),
+        activity_level=Decimal(500),
+        attributed_emissions=Decimal(100),
     )
     db_session.add(prod)
     db_session.commit()
@@ -143,29 +151,31 @@ def sample_product_simple(db_session, sample_installation):
 
 @pytest.fixture
 def sample_default_factors(db_session):
-    """Facteurs d'émission par défaut."""
+    """Illustrative default factors (kg CO2e per t)."""
     factors = [
-        ("iron_steel", "TR", 1.8),
-        ("iron_steel", "CN", 2.2),
-        ("aluminium", "TR", 8.0),
+        ("iron_steel", "TR", 1800),
+        ("iron_steel", "CN", 2200),
+        ("aluminium", "TR", 8000),
     ]
     for sector, country, factor in factors:
-        db_session.add(DefaultEmissionFactor(
-            sector=sector,
-            country_code=country,
-            emission_factor_kg_co2_per_tonne=Decimal(str(factor)),
-            source="Test",
-        ))
+        db_session.add(
+            DefaultEmissionFactor(
+                sector=sector,
+                country_code=country,
+                emission_factor_kg_co2_per_tonne=Decimal(str(factor)),
+                source="Test",
+            )
+        )
     db_session.commit()
 
 
 @pytest.fixture
 def sample_cn_codes(db_session):
-    """Codes CN de référence."""
+    """Reference CN codes."""
     codes = [
-        ("7208", "Plaques acier laminées à chaud"),
-        ("7306", "Tubes acier soudés"),
-        ("7606", "Plaques aluminium"),
+        ("7208", "Hot-rolled flat steel"),
+        ("7306", "Welded steel tubes"),
+        ("7606", "Aluminium plates"),
     ]
     for code, desc in codes:
         db_session.add(CNCode(code=code, description=desc, level=2))
@@ -174,12 +184,12 @@ def sample_cn_codes(db_session):
 
 @pytest.fixture
 def seeded_client(client, db_engine):
-    """Client API avec données pré-chargées (installation, produit, codes CN)."""
+    """API client with an installation, a product and CN codes."""
     Session = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
     session = Session()
     try:
         inst = Installation(
-            name="Aciérie Test TR",
+            name="Test steel mill TR",
             country_code="TR",
             sector="iron_steel",
             emissions_per_tonne=Decimal("1.65"),
@@ -189,24 +199,26 @@ def seeded_client(client, db_engine):
         session.refresh(inst)
 
         prod = Product(
-            name="Tôle acier laminée",
+            name="Hot-rolled steel plate",
             cn_code="7208",
             sector="iron_steel",
             installation_id=inst.id,
-            activity_level=Decimal("1000"),
-            attributed_emissions=Decimal("50"),
+            activity_level=Decimal(1000),
+            attributed_emissions=Decimal(50),
         )
         session.add(prod)
         session.commit()
         session.refresh(prod)
 
-        session.add(ProductPrecursor(
-            product_id=prod.id,
-            mass_kg=Decimal("1050"),
-            see_per_kg=Decimal("1.6"),
-            is_real_data=True,
-        ))
-        for code, desc in [("7208", "Plaques acier"), ("7306", "Tubes"), ("7606", "Alu")]:
+        session.add(
+            ProductPrecursor(
+                product_id=prod.id,
+                mass_kg=Decimal(1050),
+                see_per_kg=Decimal("1.6"),
+                is_real_data=True,
+            )
+        )
+        for code, desc in [("7208", "Flat steel"), ("7306", "Tubes"), ("7606", "Alu")]:
             session.add(CNCode(code=code, description=desc, level=2))
         session.commit()
     finally:

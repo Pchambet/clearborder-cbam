@@ -1,13 +1,13 @@
-"""Configuration base de données — SQLite (dev) ou PostgreSQL (prod)."""
+"""Database engine: SQLite for local development, PostgreSQL when DATABASE_URL says so."""
+
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 from app.config import settings
 
-_is_sqlite = "sqlite" in settings.database_url
+_is_sqlite = settings.database_url.startswith("sqlite")
 
-_engine_kwargs = {
+_engine_kwargs: dict = {
     "connect_args": {"check_same_thread": False} if _is_sqlite else {},
     "pool_pre_ping": not _is_sqlite,
     "echo": settings.debug,
@@ -21,7 +21,7 @@ Base = declarative_base()
 
 
 def get_db():
-    """Dependency FastAPI pour obtenir une session DB."""
+    """FastAPI dependency: one session per request."""
     db = SessionLocal()
     try:
         yield db
@@ -29,7 +29,8 @@ def get_db():
         db.close()
 
 
-def init_db():
-    """Crée toutes les tables."""
-    from app import models  # noqa: F401 - load models for metadata
+def init_db() -> None:
+    """Create all tables (no migrations in this prototype)."""
+    from app import models  # noqa: F401  (registers the models on Base.metadata)
+
     Base.metadata.create_all(bind=engine)

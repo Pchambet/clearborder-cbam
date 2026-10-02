@@ -29,9 +29,7 @@ KEYWORDS: dict[str, list[str]] = {
 }
 
 
-def train_classifier(
-    descriptions: list[str], codes: list[str], model_path: Path | None = None
-) -> dict:
+def train_classifier(descriptions: list[str], codes: list[str], model_path: Path | None = None) -> dict:
     """Fit TF-IDF + logistic regression on (description, CN code) pairs and save it.
 
     Returns cross-validated accuracy (indicative only on small samples), sample and

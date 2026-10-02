@@ -1,192 +1,140 @@
-"""
-Générateur de rapports XML CBAM Quarterly Report
-Structure conforme au schéma XSD TAXUD (simplifié pour MVP)
+"""Quarterly CBAM report as XML.
+
+The structure mirrors the content of a transitional-period quarterly report
+(declarant, period, goods, CN code, quantity, specific embedded emissions,
+country of origin) but it is a simplified, project-specific format under its own
+namespace. It is *not* the official CBAM Registry XSD; when that schema is
+placed in ``schemas/cbam_report.xsd``, ``validate_xml_against_xsd`` checks
+documents against it.
 """
 
 import xml.etree.ElementTree as ET
-from xml.dom import minidom
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
-from decimal import Decimal
+from xml.dom import minidom
+
+NAMESPACE = "urn:clearborder:cbam-report:0.1"
+REQUIRED_PRODUCT_FIELDS = (
+    "CNCode",
+    "ProductName",
+    "Quantity",
+    "SpecificEmbeddedEmissions",
+    "CountryOfOrigin",
+)
 
 
 def create_cbam_report_xml(
     declarant_id: str,
-    reporting_period: str,  # Format: "2026-Q1"
+    reporting_period: str,
     products: list[dict],
-    installation_emissions: Optional[dict] = None,
+    installation_emissions: dict | None = None,
 ) -> str:
+    """Build the report.
+
+    ``reporting_period`` looks like "2026-Q1". Each product dict holds cn_code,
+    product_name, quantity_kg, see_per_kg (kg CO2e/kg), country_of_origin (ISO
+    alpha-2) and optionally installation_id.
     """
-    Génère un rapport XML CBAM trimestriel.
-    
-    products: liste de dicts avec:
-    - cn_code: code nomenclature CN (8 chiffres)
-    - product_name: nom du produit
-    - quantity_kg: quantité importée en kg
-    - see_per_kg: émissions spécifiques en kg CO2e/kg
-    - country_of_origin: pays d'origine (code ISO)
-    - installation_id: ID installation (optionnel)
-    """
-    # Namespace CBAM (à adapter selon schéma officiel TAXUD)
-    ns = {
-        "cbam": "https://taxation-customs.ec.europa.eu/cbam",
-    }
-    
-    # Root element
-    root = ET.Element("CBAMReport", attrib={
-        "xmlns": "https://taxation-customs.ec.europa.eu/cbam",
-        "version": "1.0",
-        "reportingPeriod": reporting_period,
-    })
-    
-    # Métadonnées
+    root = ET.Element(
+        "CBAMReport",
+        attrib={"xmlns": NAMESPACE, "version": "0.1", "reportingPeriod": reporting_period},
+    )
+
     meta = ET.SubElement(root, "ReportMetadata")
     ET.SubElement(meta, "DeclarantId").text = declarant_id
-    ET.SubElement(meta, "ReportDate").text = datetime.utcnow().strftime("%Y-%m-%d")
+    ET.SubElement(meta, "ReportDate").text = datetime.now(UTC).strftime("%Y-%m-%d")
     ET.SubElement(meta, "ReportType").text = "Quarterly"
-    
-    # Section produits
+
     products_elem = ET.SubElement(root, "ReportedProducts")
-    
-    for i, p in enumerate(products):
-        product_elem = ET.SubElement(products_elem, "Product", attrib={"id": str(i + 1)})
-        ET.SubElement(product_elem, "CNCode").text = str(p.get("cn_code", ""))
-        ET.SubElement(product_elem, "ProductName").text = str(p.get("product_name", ""))
-        ET.SubElement(product_elem, "Quantity").text = str(p.get("quantity_kg", 0))
-        ET.SubElement(product_elem, "Unit").text = "kg"
-        ET.SubElement(product_elem, "SpecificEmbeddedEmissions").text = str(
+    for i, p in enumerate(products, start=1):
+        product = ET.SubElement(products_elem, "Product", attrib={"id": str(i)})
+        ET.SubElement(product, "CNCode").text = str(p.get("cn_code", ""))
+        ET.SubElement(product, "ProductName").text = str(p.get("product_name", ""))
+        ET.SubElement(product, "Quantity").text = str(p.get("quantity_kg", 0))
+        ET.SubElement(product, "Unit").text = "kg"
+        ET.SubElement(product, "SpecificEmbeddedEmissions").text = str(
             round(float(p.get("see_per_kg", 0)), 6)
         )
-        ET.SubElement(product_elem, "UnitEmissions").text = "kgCO2e/kg"
-        ET.SubElement(product_elem, "CountryOfOrigin").text = str(
-            p.get("country_of_origin", "")
-        )
+        ET.SubElement(product, "UnitEmissions").text = "kgCO2e/kg"
+        ET.SubElement(product, "CountryOfOrigin").text = str(p.get("country_of_origin", ""))
         if p.get("installation_id"):
-            ET.SubElement(product_elem, "InstallationId").text = str(p["installation_id"])
-    
-    # Section installations (si fournie)
+            ET.SubElement(product, "InstallationId").text = str(p["installation_id"])
+
     if installation_emissions:
-        installations_elem = ET.SubElement(root, "Installations")
+        installations = ET.SubElement(root, "Installations")
         for inst_id, data in installation_emissions.items():
-            inst_elem = ET.SubElement(installations_elem, "Installation", attrib={"id": inst_id})
-            ET.SubElement(inst_elem, "Country").text = data.get("country", "")
-            ET.SubElement(inst_elem, "Sector").text = data.get("sector", "")
-            ET.SubElement(inst_elem, "TotalEmissions").text = str(data.get("total_emissions", 0))
-    
-    # Pretty print
+            inst = ET.SubElement(installations, "Installation", attrib={"id": inst_id})
+            ET.SubElement(inst, "Country").text = data.get("country", "")
+            ET.SubElement(inst, "Sector").text = data.get("sector", "")
+            ET.SubElement(inst, "TotalEmissions").text = str(data.get("total_emissions", 0))
+
     xml_str = ET.tostring(root, encoding="unicode", method="xml")
-    dom = minidom.parseString(xml_str)
-    return dom.toprettyxml(indent="  ", encoding=None)
-
-
-class CBAMReportGenerator:
-    """Générateur de rapports XML CBAM."""
-
-    def generate_quarterly_report(
-        self,
-        declarant_id: str,
-        reporting_period: str,
-        results: list[dict],
-    ) -> str:
-        """
-        Génère le XML du rapport trimestriel.
-        results: liste de dicts avec cn_code, description, see_kg_co2_per_tonne,
-                 quantity_tonnes, country_of_origin (optionnel)
-        """
-        products = []
-        for r in results:
-            # see_kg_co2_per_tonne -> see_per_kg = / 1000
-            see_per_kg = r.get("see_kg_co2_per_tonne", 0) / 1000
-            qty_tonnes = r.get("quantity_tonnes", 0)
-            products.append({
-                "cn_code": r.get("cn_code", ""),
-                "product_name": r.get("description", ""),
-                "quantity_kg": qty_tonnes * 1000,
-                "see_per_kg": see_per_kg,
-                "country_of_origin": r.get("country_of_origin", ""),
-                "installation_id": r.get("installation_id"),
-            })
-        return create_cbam_report_xml(
-            declarant_id=declarant_id,
-            reporting_period=reporting_period,
-            products=products,
-        )
+    return minidom.parseString(xml_str).toprettyxml(indent="  ")
 
 
 def _local_name(tag: str) -> str:
-    """Extrait le nom local d'un tag (sans namespace)."""
-    return tag.split("}")[-1] if "}" in tag else tag
+    """Tag name without its namespace."""
+    return tag.split("}")[-1]
 
 
-def _find_by_localname(parent, localname: str):
-    """Trouve le premier enfant avec ce nom local."""
-    for e in parent.iter():
-        if _local_name(e.tag) == localname:
-            return e
-    return None
+def _find_by_localname(parent: ET.Element, localname: str) -> ET.Element | None:
+    """First descendant (or self) with this local name."""
+    return next((e for e in parent.iter() if _local_name(e.tag) == localname), None)
 
 
-def _findall_by_localname(parent, localname: str) -> list:
-    """Trouve tous les descendants avec ce nom local."""
+def _findall_by_localname(parent: ET.Element, localname: str) -> list[ET.Element]:
+    """All descendants (or self) with this local name."""
     return [e for e in parent.iter() if _local_name(e.tag) == localname]
 
 
 def validate_xml_against_xsd(xml_content: str, xsd_path: str | None = None) -> tuple[bool, list[str]]:
-    """
-    Valide le XML contre un schéma XSD TAXUD (si fourni).
-    Le schéma officiel est disponible via le CBAM Declarant Portal.
-    Placez cbam_report.xsd dans clearborder/schemas/ pour activer.
-    """
+    """Validate against an XSD; skipped (returns valid) when no schema file is present."""
     path = Path(xsd_path) if xsd_path else Path(__file__).parent.parent / "schemas" / "cbam_report.xsd"
     if not path.exists():
-        return True, []  # Pas de XSD = skip (validation structure suffit en dev)
-    try:
-        from lxml import etree
-        schema_doc = etree.parse(str(path))
-        schema = etree.XMLSchema(schema_doc)
-        doc = etree.fromstring(xml_content.encode("utf-8"))
-        schema.assertValid(doc)
         return True, []
+
+    from lxml import etree
+
+    try:
+        schema = etree.XMLSchema(etree.parse(str(path)))
     except etree.XMLSchemaParseError as e:
-        return False, [f"Schéma XSD invalide: {e}"]
+        return False, [f"Invalid XSD: {e}"]
+    try:
+        schema.assertValid(etree.fromstring(xml_content.encode("utf-8")))
     except etree.DocumentInvalid as e:
         return False, [str(err) for err in e.error_log]
-    except Exception as e:
-        return False, [f"Erreur validation XSD: {e}"]
+    except etree.XMLSyntaxError as e:
+        return False, [f"Malformed XML: {e}"]
+    return True, []
 
 
 def validate_xml_structure(xml_content: str) -> tuple[bool, list[str]]:
-    """
-    Validation stricte de la structure XML CBAM.
-    Vérifie les éléments requis selon le format Quarterly Report.
-    Pour validation XSD officielle : schéma TAXUD sur CBAM Registry.
-    """
-    errors = []
+    """Check that the elements this format requires are present and non-empty."""
     try:
         root = ET.fromstring(xml_content)
-        if _local_name(root.tag) != "CBAMReport":
-            errors.append("Element racine doit être CBAMReport")
-
-        meta = _find_by_localname(root, "ReportMetadata")
-        if meta is None:
-            errors.append("ReportMetadata manquante")
-        else:
-            for req in ["DeclarantId", "ReportDate", "ReportType"]:
-                if _find_by_localname(meta, req) is None:
-                    errors.append(f"ReportMetadata.{req} manquant")
-
-        products_elem = _find_by_localname(root, "ReportedProducts")
-        if products_elem is None:
-            errors.append("Section ReportedProducts manquante")
-        else:
-            prods = _findall_by_localname(products_elem, "Product")
-            for i, p in enumerate(prods):
-                for req in ["CNCode", "ProductName", "Quantity", "SpecificEmbeddedEmissions", "CountryOfOrigin"]:
-                    elem = _find_by_localname(p, req)
-                    if elem is None or (elem.text or "").strip() == "":
-                        errors.append(f"Product[{i+1}].{req} manquant ou vide")
-
-        return len(errors) == 0, errors
     except ET.ParseError as e:
-        return False, [f"Erreur XML: {str(e)}"]
+        return False, [f"Malformed XML: {e}"]
+
+    errors = []
+    if _local_name(root.tag) != "CBAMReport":
+        errors.append("Root element must be CBAMReport")
+
+    meta = _find_by_localname(root, "ReportMetadata")
+    if meta is None:
+        errors.append("ReportMetadata is missing")
+    else:
+        for name in ("DeclarantId", "ReportDate", "ReportType"):
+            if _find_by_localname(meta, name) is None:
+                errors.append(f"ReportMetadata.{name} is missing")
+
+    products = _find_by_localname(root, "ReportedProducts")
+    if products is None:
+        errors.append("ReportedProducts is missing")
+    else:
+        for i, product in enumerate(_findall_by_localname(products, "Product"), start=1):
+            for name in REQUIRED_PRODUCT_FIELDS:
+                elem = _find_by_localname(product, name)
+                if elem is None or not (elem.text or "").strip():
+                    errors.append(f"Product[{i}].{name} is missing or empty")
+
+    return not errors, errors

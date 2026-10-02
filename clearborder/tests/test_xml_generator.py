@@ -1,147 +1,97 @@
-"""
-Tests du générateur XML CBAM — structure, validation, conformité.
-"""
+"""Tests for the quarterly report XML: structure and validation."""
+
 import xml.etree.ElementTree as ET
 
 from app.xml_generator import (
+    NAMESPACE,
+    _find_by_localname,
+    _findall_by_localname,
     create_cbam_report_xml,
-    CBAMReportGenerator,
+    validate_xml_against_xsd,
     validate_xml_structure,
 )
 
-CBAM_NS = "https://taxation-customs.ec.europa.eu/cbam"
-
-
-def _find_by_localname(parent, localname: str):
-    """Trouve le premier élément par nom local (ignore namespace)."""
-    for e in parent.iter():
-        tag_local = e.tag.split("}")[-1] if "}" in e.tag else e.tag
-        if tag_local == localname:
-            return e
-    return None
-
-
-def _findall_by_localname(parent, localname: str):
-    """Trouve tous les éléments par nom local."""
-    return [e for e in parent.iter() if (e.tag.split("}")[-1] if "}" in e.tag else e.tag) == localname]
+STEEL = {
+    "cn_code": "7208",
+    "product_name": "Hot-rolled steel plate",
+    "quantity_kg": 5000,
+    "see_per_kg": 1.65,
+    "country_of_origin": "TR",
+}
 
 
 class TestCreateCbamReportXml:
-    """Tests de la génération XML."""
-
-    def test_basic_structure(self):
-        xml = create_cbam_report_xml(
-            declarant_id="EU-12345",
-            reporting_period="2026-Q1",
-            products=[
-                {
-                    "cn_code": "7208",
-                    "product_name": "Tôle acier",
-                    "quantity_kg": 5000,
-                    "see_per_kg": 1.65,
-                    "country_of_origin": "TR",
-                },
-            ],
-        )
-        root = ET.fromstring(xml)
-        assert root.tag.endswith("CBAMReport") or root.tag == "CBAMReport"
+    def test_root_namespace_and_period(self):
+        root = ET.fromstring(create_cbam_report_xml("EU-12345", "2026-Q1", [STEEL]))
+        assert root.tag == f"{{{NAMESPACE}}}CBAMReport"
         assert root.get("reportingPeriod") == "2026-Q1"
 
     def test_report_metadata(self):
-        xml = create_cbam_report_xml(
-            declarant_id="EU-999",
-            reporting_period="2026-Q2",
-            products=[],
-        )
-        root = ET.fromstring(xml)
+        root = ET.fromstring(create_cbam_report_xml("EU-999", "2026-Q2", []))
         meta = _find_by_localname(root, "ReportMetadata")
-        assert meta is not None
-        decl = _find_by_localname(meta, "DeclarantId")
-        assert decl is not None
-        assert decl.text == "EU-999"
+        assert _find_by_localname(meta, "DeclarantId").text == "EU-999"
+        assert _find_by_localname(meta, "ReportType").text == "Quarterly"
+
+    def test_product_values_are_written(self):
+        root = ET.fromstring(create_cbam_report_xml("EU-1", "2026-Q1", [STEEL]))
+        product = _findall_by_localname(root, "Product")[0]
+        assert _find_by_localname(product, "Quantity").text == "5000"
+        assert _find_by_localname(product, "SpecificEmbeddedEmissions").text == "1.65"
+        assert _find_by_localname(product, "CountryOfOrigin").text == "TR"
 
     def test_multiple_products(self):
-        products = [
-            {"cn_code": "7208", "product_name": "Acier", "quantity_kg": 1000, "see_per_kg": 1.5, "country_of_origin": "TR"},
-            {"cn_code": "7606", "product_name": "Alu", "quantity_kg": 500, "see_per_kg": 8.0, "country_of_origin": "CN"},
-        ]
-        xml = create_cbam_report_xml(
-            declarant_id="EU-1",
-            reporting_period="2026-Q1",
-            products=products,
-        )
-        root = ET.fromstring(xml)
-        prods_elem = _find_by_localname(root, "ReportedProducts")
-        prods = _findall_by_localname(prods_elem, "Product")
-        assert len(prods) == 2
+        aluminium = {**STEEL, "cn_code": "7606", "see_per_kg": 8.0, "country_of_origin": "CN"}
+        root = ET.fromstring(create_cbam_report_xml("EU-1", "2026-Q1", [STEEL, aluminium]))
+        products = _findall_by_localname(_find_by_localname(root, "ReportedProducts"), "Product")
+        assert [p.get("id") for p in products] == ["1", "2"]
 
     def test_installation_emissions_section(self):
         xml = create_cbam_report_xml(
-            declarant_id="EU-1",
-            reporting_period="2026-Q1",
-            products=[],
+            "EU-1",
+            "2026-Q1",
+            [],
             installation_emissions={
                 "INST-001": {"country": "TR", "sector": "iron_steel", "total_emissions": 15000},
             },
         )
-        root = ET.fromstring(xml)
-        inst_elem = _find_by_localname(root, "Installations")
-        assert inst_elem is not None
-
-
-class TestCBAMReportGenerator:
-    """Tests du générateur de rapports."""
-
-    def test_generate_quarterly_report(self):
-        gen = CBAMReportGenerator()
-        results = [
-            {
-                "cn_code": "7208",
-                "description": "Tôle acier",
-                "see_kg_co2_per_tonne": 1650,
-                "quantity_tonnes": 5,
-                "country_of_origin": "TR",
-            },
-        ]
-        xml = gen.generate_quarterly_report(
-            declarant_id="EU-1",
-            reporting_period="2026-Q1",
-            results=results,
-        )
-        root = ET.fromstring(xml)
-        assert root is not None
-        # quantity_tonnes=5 -> quantity_kg=5000
-        prods_elem = _find_by_localname(root, "ReportedProducts")
-        assert prods_elem is not None
-        prods = _findall_by_localname(prods_elem, "Product")
-        assert len(prods) >= 1
-        qty = _find_by_localname(prods[0], "Quantity")
-        assert qty is not None
-        assert qty.text == "5000"
+        assert _find_by_localname(ET.fromstring(xml), "Installations") is not None
 
 
 class TestValidateXmlStructure:
-    """Tests de validation de structure XML."""
-
-    def test_valid_xml_passes(self):
-        xml = create_cbam_report_xml(
-            declarant_id="EU-1",
-            reporting_period="2026-Q1",
-            products=[
-                {"cn_code": "7208", "product_name": "Acier", "quantity_kg": 1000, "see_per_kg": 1.5, "country_of_origin": "TR"},
-            ],
+    def test_generated_report_is_valid(self):
+        assert validate_xml_structure(create_cbam_report_xml("EU-1", "2026-Q1", [STEEL])) == (
+            True,
+            [],
         )
-        valid, errors = validate_xml_structure(xml)
-        assert valid is True
-        assert len(errors) == 0
+
+    def test_missing_required_field_is_reported(self):
+        incomplete = {**STEEL, "country_of_origin": ""}
+        valid, errors = validate_xml_structure(create_cbam_report_xml("EU-1", "2026-Q1", [incomplete]))
+        assert valid is False
+        assert errors == ["Product[1].CountryOfOrigin is missing or empty"]
 
     def test_invalid_root_fails(self):
-        invalid_xml = '<?xml version="1.0"?><WrongRoot></WrongRoot>'
-        valid, errors = validate_xml_structure(invalid_xml)
+        valid, errors = validate_xml_structure('<?xml version="1.0"?><WrongRoot></WrongRoot>')
         assert valid is False
         assert any("CBAMReport" in e for e in errors)
 
     def test_malformed_xml_fails(self):
         valid, errors = validate_xml_structure("<not valid xml")
         assert valid is False
-        assert len(errors) > 0
+        assert errors[0].startswith("Malformed XML")
+
+
+class TestValidateXmlAgainstXsd:
+    def test_skipped_without_schema(self, tmp_path):
+        assert validate_xml_against_xsd("<a/>", str(tmp_path / "missing.xsd")) == (True, [])
+
+    def test_document_checked_against_schema(self, tmp_path):
+        xsd = tmp_path / "schema.xsd"
+        xsd.write_text(
+            '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">'
+            '<xs:element name="a" type="xs:integer"/></xs:schema>'
+        )
+        assert validate_xml_against_xsd("<a>3</a>", str(xsd)) == (True, [])
+        valid, errors = validate_xml_against_xsd("<a>x</a>", str(xsd))
+        assert valid is False
+        assert errors

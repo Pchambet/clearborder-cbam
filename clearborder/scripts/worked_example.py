@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Worked example for the README: why the 20 % cap on estimates must be measured on emissions.
+"""Worked example for the README: why the transitional-period 20 % cap on estimates is measured
+on emissions.
 
 An illustrative complex good: 1 t of welded steel tube (CN 7306) made from
 1,060 kg of hot-rolled coil bought from two suppliers. Supplier A (electric arc
@@ -96,7 +97,15 @@ def main() -> None:
     ax.plot([x * 100 for x in xs], [y * 100 for y in ys], color=TEAL, lw=2.4)
     ax.plot([0, 30], [0, 30], color=SLATE, lw=1.6, ls="--")
     ax.axhline(20, color=AMBER, lw=1.4)
-    ax.text(0.5, 21, "20 % cap on estimates", color=AMBER, ha="left", va="bottom", fontsize=9)
+    ax.text(
+        12.5,
+        21,
+        "20 % cap on estimates\n(2023–2025 transitional period)",
+        color=AMBER,
+        ha="left",
+        va="bottom",
+        fontsize=9,
+    )
     ax.text(21, 60, "share of embedded emissions\n(what the regulation caps)", color=TEAL, fontsize=9)
     ax.text(21, 9, "share of precursor mass\n(what the first version checked)", color=SLATE, fontsize=9)
 

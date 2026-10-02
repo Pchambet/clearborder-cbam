@@ -1,18 +1,21 @@
 # clearborder-cbam
 
 How much embedded CO2 does an imported steel or aluminium good carry under the EU Carbon Border
-Adjustment Mechanism (CBAM), and does its data meet the 20 % cap on estimates of the 2023–2025
-transitional period? A tested calculation engine, API and dashboard, built as an early prototype
-in spring 2026.
+Adjustment Mechanism (CBAM), and does its data meet the transitional-period cap on estimates
+(Implementing Regulation (EU) 2023/1773, 2023–2025: at most 20 % of a complex good's embedded
+emissions)? A tested calculation engine, API and dashboard, built as an early prototype in spring
+2026.
 
 [![CI](https://github.com/Pchambet/clearborder-cbam/actions/workflows/ci.yml/badge.svg)](https://github.com/Pchambet/clearborder-cbam/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%E2%80%933.14-blue)
 
 ![A mass-based check passes a tube whose embedded emissions are 43 % estimated](docs/figures/estimation-cap.png)
 
-> **Status.** Exploratory prototype (March 2026), reviewed and corrected in October 2026. Only
-> the CBAM part of a broader landed-cost exploration was built here; that exploration later
-> narrowed into [FreightSight](https://github.com/Pchambet/freightsight-landed-cost).
+> **Status.** Exploratory prototype (March 2026), reviewed and corrected in October 2026. It
+> started as a broader idea, one engine for the total cost of an import (customs duties, tariffs
+> and CBAM together); only the CBAM engine was built here. The work then narrowed to landed-cost
+> allocation for importers, which became
+> [FreightSight](https://github.com/Pchambet/freightsight-landed-cost).
 
 ## TL;DR
 
@@ -20,11 +23,11 @@ in spring 2026.
   Annex IV — `SEE = (AttrEm + Σ M_i · SEE_i) / AL` — including nested bills of materials
   (engine-level; the API and dashboard take a flat bill of materials), as pure functions tested
   against hand-computed cases.
-- **The transitional-period 20 % cap on estimates must be measured on emissions, not on mass.** On an illustrative
-  welded tube (figure above), 210 kg of 1,060 kg of coil comes from a supplier without data:
-  19.8 % of precursor mass, but 43.4 % of the 1,113 kg CO2e embedded. A mass-based check passes
-  it; the emissions-based check fails it. The cap is already breached once 7.3 % of the coil comes
-  from that supplier.
+- **The 20 % cap on estimates of the transitional period (2023–2025) applies to embedded
+  emissions, not to precursor mass.** On an illustrative welded tube (figure above), 210 kg of
+  1,060 kg of coil comes from a supplier without data: 19.8 % of precursor mass, but 43.4 % of the
+  1,113 kg CO2e embedded. A mass-based check passes it; the emissions-based check fails it. The
+  cap is already breached once 7.3 % of the coil comes from that supplier.
 - **The first version checked the cap on mass.** An October 2026 self-review found this and two
   crash bugs; all are fixed and covered by tests (see [Changes since the first version](#changes-since-the-first-version)).
 - **81 tests, 96 % line coverage** of the application package, ruff-clean, under a minute on a laptop;

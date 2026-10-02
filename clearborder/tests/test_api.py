@@ -1,12 +1,13 @@
 """
-Tests d'intégration API — endpoints FastAPI.
+API integration tests (FastAPI TestClient on a temporary SQLite database).
 """
+
 import pytest
 from fastapi.testclient import TestClient
 
 
 class TestHealth:
-    """Tests des endpoints de santé."""
+    """Root and health endpoints."""
 
     def test_root(self, client: TestClient):
         r = client.get("/")
@@ -22,11 +23,11 @@ class TestHealth:
 
 
 class TestInstallations:
-    """Tests CRUD installations."""
+    """Installations."""
 
     def test_create_installation(self, client: TestClient):
         payload = {
-            "name": "Aciérie Test",
+            "name": "Test steel mill",
             "country_code": "TR",
             "sector": "iron_steel",
             "emissions_per_tonne": 1.65,
@@ -34,7 +35,7 @@ class TestInstallations:
         r = client.post("/api/v1/installations", json=payload)
         assert r.status_code == 200
         data = r.json()
-        assert data["name"] == "Aciérie Test"
+        assert data["name"] == "Test steel mill"
         assert data["country_code"] == "TR"
         assert "id" in data
 
@@ -48,9 +49,14 @@ class TestInstallations:
         assert r.status_code == 404
 
     def test_get_installation(self, client: TestClient):
-        create = client.post("/api/v1/installations", json={
-            "name": "Inst", "country_code": "CN", "sector": "iron_steel",
-        })
+        create = client.post(
+            "/api/v1/installations",
+            json={
+                "name": "Inst",
+                "country_code": "CN",
+                "sector": "iron_steel",
+            },
+        )
         inst_id = create.json()["id"]
         r = client.get(f"/api/v1/installations/{inst_id}")
         assert r.status_code == 200
@@ -58,16 +64,21 @@ class TestInstallations:
 
 
 class TestProducts:
-    """Tests CRUD produits."""
+    """Products."""
 
     def test_create_product_requires_installation(self, client: TestClient):
-        # Créer d'abord une installation
-        inst = client.post("/api/v1/installations", json={
-            "name": "Inst", "country_code": "TR", "sector": "iron_steel",
-        })
+        # a product needs an installation
+        inst = client.post(
+            "/api/v1/installations",
+            json={
+                "name": "Inst",
+                "country_code": "TR",
+                "sector": "iron_steel",
+            },
+        )
         inst_id = inst.json()["id"]
         payload = {
-            "name": "Tôle acier",
+            "name": "Steel plate",
             "cn_code": "7208",
             "sector": "iron_steel",
             "installation_id": inst_id,
@@ -80,7 +91,7 @@ class TestProducts:
         r = client.post("/api/v1/products", json=payload)
         assert r.status_code == 200
         data = r.json()
-        assert data["name"] == "Tôle acier"
+        assert data["name"] == "Steel plate"
         assert data["cn_code"] == "7208"
 
     def test_list_products(self, client: TestClient):
@@ -94,7 +105,7 @@ class TestProducts:
 
 
 class TestCbamReport:
-    """Tests génération rapport CBAM."""
+    """Report generation."""
 
     def test_generate_report_requires_valid_products(self, client: TestClient):
         payload = {
@@ -121,12 +132,16 @@ class TestCbamReport:
         assert "results" in data
         assert "xml_content" in data
         assert "compliant" in data
-        assert len(data["results"]) >= 1
-        assert "CBAMReport" in data["xml_content"]
+        assert len(data["results"]) == 1
+        # seeded product: (50 + 1050 * 1.6) / 1000 kg = 1.73 kg/kg = 1730 kg CO2e per t
+        assert data["results"][0]["see_kg_co2_per_tonne"] == pytest.approx(1730.0)
+        assert data["compliant"] is True
+        assert "<Quantity>5000.0</Quantity>" in data["xml_content"]
+        assert "<CountryOfOrigin>TR</CountryOfOrigin>" in data["xml_content"]
 
 
 class TestCnCodes:
-    """Tests codes CN."""
+    """CN codes."""
 
     def test_list_cn_codes_empty(self, client: TestClient):
         r = client.get("/api/v1/cn-codes")
@@ -144,16 +159,37 @@ class TestCnCodes:
 
 
 class TestClassify:
-    """Tests classification CN."""
+    """CN classification."""
 
     def test_classify_product(self, client: TestClient):
-        r = client.post("/api/v1/classify", json={
-            "description": "Tôle acier laminée à chaud",
-            "top_k": 3,
-        })
+        r = client.post(
+            "/api/v1/classify",
+            json={
+                "description": "hot-rolled steel plate",
+                "top_k": 3,
+            },
+        )
         assert r.status_code == 200
         data = r.json()
         assert "suggestions" in data
         assert len(data["suggestions"]) >= 1
         assert "code" in data["suggestions"][0]
         assert "confidence" in data["suggestions"][0]
+
+
+class TestApiKeys:
+    """Authentication is off with no configured key, enforced otherwise."""
+
+    def test_missing_and_invalid_keys_are_rejected(self, client: TestClient, monkeypatch):
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "api_keys", "secret")
+        assert client.get("/api/v1/products").status_code == 401
+        assert client.get("/api/v1/products", headers={"X-API-Key": "wrong"}).status_code == 403
+        assert client.get("/api/v1/products", headers={"X-API-Key": "secret"}).status_code == 200
+
+    def test_keys_parsed_from_comma_separated_env(self, monkeypatch):
+        from app.config import Settings
+
+        monkeypatch.setenv("API_KEYS", "a, b,,c")
+        assert Settings().allowed_api_keys == ["a", "b", "c"]

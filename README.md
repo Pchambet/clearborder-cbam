@@ -15,7 +15,7 @@ emissions)? A tested calculation engine, API and dashboard, built as an early pr
 > started as a broader idea, one engine for the total cost of an import (customs duties, tariffs
 > and CBAM together); only the CBAM engine was built here. The work then narrowed to landed-cost
 > allocation for importers, which became
-> [FreightSight](https://github.com/Pchambet/freightsight-landed-cost).
+> [FreightSight](https://github.com/Pchambet/FreightSight).
 
 ## TL;DR
 
